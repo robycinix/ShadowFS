@@ -15,6 +15,9 @@ import java.util.TimerTask
 class ShadowForegroundService : Service() {
     private val CHANNEL_ID = "ShadowFS_Channel"
     private val MONITORED_DIR = "/storage/emulated/0" // Ora monitora l'intera memoria condivisa
+    private lateinit var vfsManager: VfsManager
+    private lateinit var hydrationManager: HydrationManager
+    private val scanTimer = Timer()
 
     // --- REGOLE INTELLIGENTI DI GHOSTING ---
     private val PINNED_FOLDERS = listOf(

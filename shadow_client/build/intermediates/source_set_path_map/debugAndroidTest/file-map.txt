@@ -1,0 +1,6 @@
+com.shadowfs.client.test-jetified-annotation-experimental-1.3.0-0 C:\Users\rober\.gradle\caches\transforms-3\4e6af9eb896010b3797e88620971fee5\transformed\jetified-annotation-experimental-1.3.0\res
+com.shadowfs.client.test-jetified-core-1.5.0-1 C:\Users\rober\.gradle\caches\transforms-3\689748fcc16853a427799530cb31bc54\transformed\jetified-core-1.5.0\res
+com.shadowfs.client.test-androidTest-2 C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\build\generated\res\resValues\androidTest\debug
+com.shadowfs.client.test-mergeDebugAndroidTestResources-3 C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\build\intermediates\incremental\debugAndroidTest\mergeDebugAndroidTestResources\merged.dir
+com.shadowfs.client.test-mergeDebugAndroidTestResources-4 C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\build\intermediates\incremental\debugAndroidTest\mergeDebugAndroidTestResources\stripped.dir
+com.shadowfs.client.test-merged_res-5 C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\build\intermediates\merged_res\debugAndroidTest

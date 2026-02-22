@@ -46,11 +46,16 @@ mkdir -p "$PROJECT_DIR"
 mkdir -p "$STORAGE_DIR"
 chmod 777 "$STORAGE_DIR" # Permessi ampi temporanei per scrittura offload
 
-# Copia i file sorgente attuali dalla directory locale al demone (assumendo l'esecuzione da radice del progetto)
-if [ -d "./shadow_daemon" ]; then
+# Copia i file sorgente attuali dalla directory locale al demone
+if [ -f "./main.go" ] && [ -f "./go.mod" ]; then
+    echo -e "File sorgenti trovati nella cartella corrente. Copia in corso..."
+    cp -r ./* "$PROJECT_DIR/"
+elif [ -d "./shadow_daemon" ]; then
+    echo -e "File sorgenti trovati in ./shadow_daemon. Copia in corso..."
     cp -r ./shadow_daemon/* "$PROJECT_DIR/"
 else
-    echo -e "${RED}Attenzione: Impossibile trovare i file sorgente in './shadow_daemon/'. Assicurati di essere nella cartella principale del progetto.${NC}"
+    echo -e "${RED}Attenzione: Impossibile trovare i file sorgente in './shadow_daemon/' o nella cartella corrente. Assicurati di essere nella cartella corretta.${NC}"
+    exit 1
 fi
 
 # 5. Compilazione e Setup
