@@ -5,17 +5,30 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import android.os.FileObserver
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.io.File
-import java.io.FileOutputStream
+import java.util.concurrent.ConcurrentHashMap
 
+/**
+ * HydrationManager — monitora gli accessi ai file "ghost" (0 byte con .shadow marker)
+ * e avvia il download automatico dal Raspberry Pi quando l'utente tenta di aprirli.
+ *
+ * Usa FileObserver (API nativa Android) per intercettare gli eventi OPEN sul filesystem.
+ * Quando rileva un accesso ad un file ghost, chiama ShadowClient.download() con il
+ * percorso relativo corretto.
+ */
 class HydrationManager(private val context: Context, private val rootDir: String) {
 
+    private val TAG = "HydrationManager"
     private val CHANNEL_ID = "HydrationChannel"
-    private val notificationManager: NotificationManager = 
+
+    private val notificationManager: NotificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-    private val activeHydrations = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    // Mappa anti-spam: evita di inviare richieste duplicate per lo stesso file
+    private val activeHydrations = ConcurrentHashMap<String, Long>()
+
     private val observers = mutableListOf<FileObserver>()
 
     init {
@@ -23,37 +36,37 @@ class HydrationManager(private val context: Context, private val rootDir: String
     }
 
     fun start() {
-        // Avviamo l'osservatore ricorsivo
+        Log.i(TAG, "Avvio osservatori su: $rootDir")
         watchDirectoryRecursive(File(rootDir))
     }
 
     private fun watchDirectoryRecursive(directory: File) {
         if (!directory.exists() || !directory.isDirectory) return
 
-        // Nessun bisogno di ascoltare le cartelle di sistema Android nascoste per idratazione
+        // Salta cartelle di sistema e nascoste
         if (directory.name.startsWith(".") || directory.absolutePath.contains("/Android/")) return
 
-        val observer = object : FileObserver(directory.absolutePath, FileObserver.OPEN or FileObserver.CREATE) {
+        val observer = object : FileObserver(directory.absolutePath, OPEN or CREATE) {
             override fun onEvent(event: Int, path: String?) {
                 if (path == null) return
                 val file = File(directory, path)
 
-                // Se è stata creata una nuova cartella, aggiungiamo un observer dinamicamente
-                if (event == FileObserver.CREATE && file.isDirectory) {
+                // Nuova cartella creata dinamicamente → aggiungi osservatore
+                if (event == CREATE && file.isDirectory) {
                     watchDirectoryRecursive(file)
                     return
                 }
 
-                if (event == FileObserver.OPEN) {
-                    // Intercetta solo se è un file svuotato da 0 byte con il metadato .shadow associato
-                    if (file.exists() && file.isFile && file.length() == 0L && File(file.parent, file.name + ".shadow").exists()) {
-                        
-                        // ANTI-SPAM (Debouncer): Controlla se il file è già in fase di download
+                if (event == OPEN) {
+                    // Controlla se è un file ghost: 0 byte + file .shadow associato
+                    val shadowMarker = File(file.parent, file.name + ".shadow")
+                    if (file.exists() && file.isFile && file.length() == 0L && shadowMarker.exists()) {
+
                         val now = System.currentTimeMillis()
                         val lastRequest = activeHydrations[file.absolutePath] ?: 0L
-                        
-                        // Ignora i mille eventi OPEN del Sistema Operativo se già in processo (Cooldown di 10 secondi)
-                        if (now - lastRequest > 10000) {
+
+                        // Debouncer: ignora eventi ripetuti entro 10 secondi
+                        if (now - lastRequest > 10_000) {
                             activeHydrations[file.absolutePath] = now
                             triggerHydration(file)
                         }
@@ -61,15 +74,13 @@ class HydrationManager(private val context: Context, private val rootDir: String
                 }
             }
         }
-        
+
         observer.startWatching()
         observers.add(observer)
 
-        // Ricorsione per le Sottocartelle già esistenti
+        // Ricursione per sottocartelle già esistenti
         directory.listFiles()?.forEach { child ->
-            if (child.isDirectory) {
-                watchDirectoryRecursive(child)
-            }
+            if (child.isDirectory) watchDirectoryRecursive(child)
         }
     }
 
@@ -77,75 +88,81 @@ class HydrationManager(private val context: Context, private val rootDir: String
         observers.forEach { it.stopWatching() }
         observers.clear()
         activeHydrations.clear()
+        Log.i(TAG, "Osservatori fermati.")
     }
 
     private fun triggerHydration(file: File) {
-        val notificationId = file.name.hashCode()
+        val notificationId = file.absolutePath.hashCode()
         showHydratingNotification(notificationId, file.name)
-        
-        QuicClientMock.requestChunk(file.name) { chunkBytes ->
-            if (chunkBytes != null) {
+
+        Log.i(TAG, "Idratazione avviata per: ${file.absolutePath}")
+
+        // Calcola il percorso relativo rispetto alla root monitorata
+        val relPath = file.absolutePath.removePrefix(rootDir).trimStart('/')
+
+        // CONNESSIONE REALE al Raspberry Pi tramite TLS+mTLS
+        ShadowClient.download(context, relPath, file) { success ->
+            if (success) {
+                // Rimuovi il marker .shadow (file idratato con successo)
                 val shadowMeta = File(file.parent, file.name + ".shadow")
-                try {
-                    FileOutputStream(file).use { fos ->
-                        fos.write(chunkBytes)
-                    }
-                    shadowMeta.delete() // Rimosso il metadato
-                    
-                    // Segna come ripristinato temporaneamente per il mietitore automatico
-                    File(file.parent, file.name + ".reghost").writeText(System.currentTimeMillis().toString())
-                    
-                    showCompletionNotification(notificationId, file.name)
-                } catch (e: Exception) {
-                    showFailureNotification(notificationId, file.name)
-                } finally {
-                    activeHydrations.remove(file.absolutePath) // Sblocco del debouncer
-                }
+                shadowMeta.delete()
+
+                // Crea il marker .reghost: il daemon ri-ghosterà questo file tra 1 ora
+                File(file.parent, file.name + ".reghost")
+                    .writeText(System.currentTimeMillis().toString())
+
+                Log.i(TAG, "✅ Idratazione completata: ${file.name} (${file.length()} bytes)")
+                showCompletionNotification(notificationId, file.name)
             } else {
+                Log.e(TAG, "❌ Idratazione fallita: ${file.name} — Raspberry non raggiungibile?")
                 showFailureNotification(notificationId, file.name)
-                activeHydrations.remove(file.absolutePath)
             }
+            activeHydrations.remove(file.absolutePath) // Sblocca il debouncer
         }
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID, "ShadowFS Idratazione", NotificationManager.IMPORTANCE_DEFAULT
+                CHANNEL_ID,
+                "ShadowFS Idratazione",
+                NotificationManager.IMPORTANCE_DEFAULT
             )
             notificationManager.createNotificationChannel(channel)
         }
     }
 
     private fun showHydratingNotification(id: Int, fileName: String) {
-        val build = NotificationCompat.Builder(context, CHANNEL_ID)
+        val notif = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("ShadowFS")
-            .setContentText("Scaricando '$fileName' in background...")
+            .setContentText("Scaricando '$fileName' dal Raspberry Pi...")
             .setProgress(100, 0, true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-
-        notificationManager.notify(id, build.build())
+            .build()
+        notificationManager.notify(id, notif)
     }
 
     private fun showCompletionNotification(id: Int, fileName: String) {
-        val build = NotificationCompat.Builder(context, CHANNEL_ID)
+        val notif = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle("ShadowFS")
-            .setContentText("File ripristinato e disponibile offline.")
+            .setContentText("'$fileName' ripristinato e disponibile.")
             .setProgress(0, 0, false)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-
-        notificationManager.notify(id, build.build())
+            .setAutoCancel(true)
+            .build()
+        notificationManager.notify(id, notif)
     }
 
     private fun showFailureNotification(id: Int, fileName: String) {
-        val build = NotificationCompat.Builder(context, CHANNEL_ID)
+        val notif = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setContentTitle("Errore ShadowFS")
-            .setContentText("Magazzino irraggiungibile.")
+            .setContentText("Impossibile recuperare '$fileName' — Raspberry irraggiungibile.")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-
-        notificationManager.notify(id, build.build())
+            .setAutoCancel(true)
+            .build()
+        notificationManager.notify(id, notif)
     }
 }

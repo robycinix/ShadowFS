@@ -13,50 +13,51 @@ import java.util.Timer
 import java.util.TimerTask
 
 class ShadowForegroundService : Service() {
+
     private val CHANNEL_ID = "ShadowFS_Channel"
-    private val MONITORED_DIR = "/storage/emulated/0" // Ora monitora l'intera memoria condivisa
+    private val MONITORED_DIR = "/storage/emulated/0"
+
     private lateinit var vfsManager: VfsManager
     private lateinit var hydrationManager: HydrationManager
     private val scanTimer = Timer()
 
     // --- REGOLE INTELLIGENTI DI GHOSTING ---
+
+    // Cartelle da non toccare mai (Pinned)
     private val PINNED_FOLDERS = listOf(
-        "/storage/emulated/0/Download/Lavoro",  // Esempio: cartella da non toccare mai
-        "/storage/emulated/0/Android"           // FONDAMENTALE: Mai ghostare la cartella di sistema visibile
+        "/storage/emulated/0/Download/shadowfs_certs", // Mai ghostare i certificati!
+        "/storage/emulated/0/Android"                 // Cartella di sistema visibile
     )
-    
-    // Lista BIANCA (Whitelist): Ghostiamo SOLO questi tipi di file (Media e Documenti grossi)
-    // Se vuota, applicherà solo la Blacklist. Ma in uno Smart Sync è meglio essere conservativi.
+
+    // Whitelist: ghostiamo SOLO questi tipi di file (media e documenti grandi)
     private val ALLOWED_EXTENSIONS = listOf(".jpg", ".jpeg", ".png", ".mp4", ".mov", ".mkv", ".pdf", ".zip")
-    
-    // Lista NERA (Blacklist): Estensioni di sistema o database da ignorare sempre
-    private val IGNORED_EXTENSIONS = listOf(".apk", ".nomedia", ".db", ".ini", ".temp")
-    
-    private val MIN_FILE_SIZE_BYTES = 1024 * 512L // 512 KB (Sotto questa soglia non ghostiamo)
+
+    // Blacklist: estensioni di sistema/database da ignorare sempre
+    private val IGNORED_EXTENSIONS = listOf(".apk", ".nomedia", ".db", ".ini", ".temp", ".shadow", ".reghost")
+
+    // Soglia minima: file sotto i 512 KB non vengono ghostati
+    private val MIN_FILE_SIZE_BYTES = 1024 * 512L
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         startForeground(1, createNotification())
-        
+
         vfsManager = VfsManager()
-        // Idratiamo gli accessi basandoci sulla Root, non più solo sulla cartella Camera
         hydrationManager = HydrationManager(this, MONITORED_DIR)
         hydrationManager.start()
 
-        // Controlla la memoria ogni ora (3600000 ms)
+        // Controlla la memoria ogni ora
         scanTimer.scheduleAtFixedRate(object : TimerTask() {
             override fun run() {
                 checkSpaceAndOffload()
             }
-        }, 0, 3600000)
+        }, 60_000L, 3_600_000L) // Primo check dopo 1 minuto, poi ogni ora
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == "FORCE_OFFLOAD") {
-            Thread {
-                checkSpaceAndOffload(force = true)
-            }.start()
+        when (intent?.action) {
+            "FORCE_OFFLOAD" -> Thread { checkSpaceAndOffload(force = true) }.start()
         }
         return START_STICKY
     }
@@ -65,80 +66,78 @@ class ShadowForegroundService : Service() {
         val root = File(MONITORED_DIR)
         val usableSpace = root.usableSpace
         val totalSpace = root.totalSpace
+        if (totalSpace == 0L) return
         val freePercentage = (usableSpace.toDouble() / totalSpace.toDouble()) * 100
 
-        // Se lo spazio scende sotto il 15%, O l'utente ha premuto il tasto "Forza"
+        // Avvia il ghosting se lo spazio è sotto il 15% OPPURE se forzato dall'utente
         if (force || freePercentage < 15.0) {
-            val thresholdTime = System.currentTimeMillis() - (3L * 24 * 60 * 60 * 1000)
+            val thresholdTime = System.currentTimeMillis() - (3L * 24 * 60 * 60 * 1000) // 3 giorni fa
 
-            // Usa "walkTopDown" per scorrere tutte le sottocartelle
             root.walkTopDown()
-                .onEnter { dir -> 
-                    // Se la cartella è nella lista nera, non entrarci proprio (Salva CPU)
-                    !PINNED_FOLDERS.any { pinned -> dir.absolutePath.startsWith(pinned) }
+                .onEnter { dir ->
+                    PINNED_FOLDERS.none { pinned -> dir.absolutePath.startsWith(pinned) }
                 }
-                .filter { file -> file.isFile } 
-                .filter { file -> 
+                .filter { file -> file.isFile }
+                .filter { file ->
                     val ext = "." + file.extension.lowercase()
-                    val isAllowedType = ALLOWED_EXTENSIONS.isEmpty() || ALLOWED_EXTENSIONS.contains(ext)
-                    
-                    !file.name.endsWith(".shadow") && 
-                    !file.name.endsWith(".reghost") &&
-                    isAllowedType &&                         // Controlla se è un tipo autorizzato (Whitelist)
-                    !IGNORED_EXTENSIONS.contains(ext) &&     // Controlla le estensioni bandite (Blacklist)
-                    file.length() > MIN_FILE_SIZE_BYTES &&   // Solo file sopra i 512KB
+                    ALLOWED_EXTENSIONS.contains(ext) &&
+                    IGNORED_EXTENSIONS.none { file.name.endsWith(it) } &&
+                    file.length() > MIN_FILE_SIZE_BYTES &&
                     (force || file.lastModified() < thresholdTime)
                 }
                 .forEach { file ->
-                    // Manda il file al Raspberry Pi tramite QUIC
-                    QuicClientMock.upload(file) { success ->
+                    // Calcola il percorso relativo rispetto alla root monitorata
+                    val relPath = file.absolutePath.removePrefix(MONITORED_DIR).trimStart('/')
+
+                    // Invia il file al Raspberry Pi via TLS mTLS REALE
+                    ShadowClient.upload(this, file, relPath) { success ->
                         if (success) {
                             vfsManager.markAsGhost(file)
+                        } else {
+                            android.util.Log.w("ShadowFS", "Upload fallito per $relPath — file non ghostato")
                         }
                     }
                 }
         }
 
-        // --- RE-GHOSTING LOGIC: Pulizia dei file Idrattati temporaneamente ---
+        // --- RE-GHOSTING: ri-ghosta i file idratati temporaneamente dopo 1 ora ---
         val now = System.currentTimeMillis()
-        val oneHourMillis = 60L * 60 * 1000 // Finestra di 1 ora
+        val oneHourMillis = 60L * 60 * 1000
 
         root.walkTopDown()
-            .onEnter { dir -> 
-                !PINNED_FOLDERS.any { pinned -> dir.absolutePath.startsWith(pinned) }
-            }
+            .onEnter { dir -> PINNED_FOLDERS.none { p -> dir.absolutePath.startsWith(p) } }
             .filter { file -> file.isFile && file.name.endsWith(".reghost") }
             .forEach { markerFile ->
                 try {
                     val hydrationTime = markerFile.readText().toLongOrNull() ?: 0L
                     if (force || (now - hydrationTime > oneHourMillis)) {
                         val originalFileName = markerFile.name.removeSuffix(".reghost")
-                        val originalFile = File(markerFile.parentFile, originalFileName) // BUG FIX: Usa la cartella del marker
-                        
+                        val originalFile = File(markerFile.parentFile, originalFileName)
+
                         if (originalFile.exists() && originalFile.length() > 0) {
-                            // SICUREZZA: Controlla se il file è bloccato da un'altra app
-                            val isLocked = !originalFile.renameTo(originalFile)
-                            
-                            // Inoltre diamo un grace-period se il file è stato appena modificato
-                            val recentlyModified = (now - originalFile.lastModified()) < 60000 
-                            
-                            if (!isLocked && !recentlyModified) {
-                                QuicClientMock.upload(originalFile) { success ->
+                            // Controlla se il file è stato modificato di recente (grace period di 1 min)
+                            val recentlyModified = (now - originalFile.lastModified()) < 60_000L
+
+                            if (!recentlyModified) {
+                                val relPath = originalFile.absolutePath
+                                    .removePrefix(MONITORED_DIR).trimStart('/')
+
+                                ShadowClient.upload(this, originalFile, relPath) { success ->
                                     if (success) {
                                         vfsManager.markAsGhost(originalFile)
                                         markerFile.delete()
-                                        println("Re-Ghost completato per: $originalFileName")
+                                        android.util.Log.i("ShadowFS", "Re-Ghost completato: $originalFileName")
                                     }
                                 }
                             } else {
-                                println("File $originalFileName ancora in uso. Re-ghosting rimandato.")
+                                android.util.Log.d("ShadowFS", "File $originalFileName recente — re-ghosting rimandato")
                             }
                         } else {
-                            markerFile.delete() 
+                            markerFile.delete() // Marker orfano, rimuovi
                         }
                     }
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    android.util.Log.e("ShadowFS", "Errore re-ghosting: ${e.message}")
                 }
             }
     }
@@ -150,8 +149,8 @@ class ShadowForegroundService : Service() {
                 "Shadow Daemon Core",
                 NotificationManager.IMPORTANCE_LOW
             )
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            getSystemService(NotificationManager::class.java)
+                .createNotificationChannel(channel)
         }
     }
 
@@ -168,19 +167,5 @@ class ShadowForegroundService : Service() {
         super.onDestroy()
         scanTimer.cancel()
         hydrationManager.stop()
-    }
-}
-
-// Simulatore Client QUIC per scopi architetturali
-object QuicClientMock {
-    fun upload(file: File, callback: (Boolean) -> Unit) {
-        println("Simulando upload su QUIC mTLS: ${file.name}")
-        callback(true)
-    }
-
-    fun requestChunk(fileName: String, callback: (ByteArray?) -> Unit) {
-        println("Richiedendo file da QUIC mTLS: ${fileName}")
-        // Dati fittizi simulati dal Raspberry
-        callback("DATI REIDRATATI DAL MAGZZINO".toByteArray())
     }
 }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ShadowFS</string>
+    <string name="service_channel_name">Shadow Daemon Core</string>
+    <string name="hydration_channel_name">ShadowFS Idratazione</string>
+</resources>

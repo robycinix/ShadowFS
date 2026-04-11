@@ -35,17 +35,13 @@ android {
 }
 
 dependencies {
+    // Android core — tutto il networking usa javax.net.ssl (built-in, nessuna libreria extra!)
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
 
-    // gRPC / Protobuf dependencies for Android
-    implementation("io.grpc:grpc-okhttp:1.61.0")
-    implementation("io.grpc:grpc-protobuf-lite:1.61.0")
-    implementation("io.grpc:grpc-stub:1.61.0")
-
-    // Test dependencies
+    // Test
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
