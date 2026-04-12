@@ -11,6 +11,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import java.io.File
+import java.io.FileOutputStream
 
 class GhostListActivity : AppCompatActivity() {
 
@@ -18,6 +19,10 @@ class GhostListActivity : AppCompatActivity() {
     private lateinit var tvRecoveredTotal: TextView
     private lateinit var tvGhostCount: TextView
     private lateinit var tvEmpty: TextView
+    private lateinit var btnSync: Button
+    private lateinit var containerOrphans: LinearLayout
+    private lateinit var btnDeleteOrphans: Button
+    private var currentOrphans: List<String> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,9 +34,23 @@ class GhostListActivity : AppCompatActivity() {
         }
 
         containerGhostList = findViewById(R.id.container_ghost_list)
-        tvRecoveredTotal    = findViewById(R.id.tv_recovered_total)
-        tvGhostCount        = findViewById(R.id.tv_ghost_count)
-        tvEmpty             = findViewById(R.id.tv_empty)
+        tvRecoveredTotal   = findViewById(R.id.tv_recovered_total)
+        tvGhostCount       = findViewById(R.id.tv_ghost_count)
+        tvEmpty            = findViewById(R.id.tv_empty)
+        btnSync            = findViewById(R.id.btn_sync)
+        containerOrphans   = findViewById(R.id.container_orphans)
+        btnDeleteOrphans   = findViewById(R.id.btn_delete_orphans)
+
+        btnSync.setOnClickListener { checkOrphans() }
+
+        btnDeleteOrphans.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Elimina orfani dal Raspberry")
+                .setMessage("Eliminare ${currentOrphans.size} file dal Raspberry?\n\nSono file che hai già cancellato dal telefono. L'operazione è irreversibile.")
+                .setPositiveButton("Elimina tutto") { _, _ -> deleteAllOrphans() }
+                .setNegativeButton("Annulla", null)
+                .show()
+        }
 
         loadGhostFiles()
     }
@@ -159,6 +178,90 @@ class GhostListActivity : AppCompatActivity() {
         }
 
         tvRecoveredTotal.text = "Recuperati: ${formatSize(totalRecovered)}"
+    }
+
+    /** Confronta i file .shadow sul telefono con quelli sul Raspberry e mostra gli orfani */
+    private fun checkOrphans() {
+        btnSync.isEnabled = false
+        btnSync.text = "🔄 Controllo..."
+        containerOrphans.removeAllViews()
+        btnDeleteOrphans.visibility = View.GONE
+
+        // Raccoglie tutti i relPath dei file ghostati sul telefono
+        val root = File(Environment.getExternalStorageDirectory().absolutePath)
+        val phoneFiles = root.walkTopDown()
+            .filter { it.isFile && it.name.endsWith(".shadow") }
+            .map { shadowFile ->
+                shadowFile.absolutePath
+                    .removePrefix(root.absolutePath)
+                    .trimStart('/')
+                    .removeSuffix(".shadow")
+            }
+            .toList()
+
+        ShadowClient.syncIndex(this, phoneFiles) { orphans ->
+            runOnUiThread {
+                btnSync.isEnabled = true
+                btnSync.text = "🔍 Controlla"
+                currentOrphans = orphans
+
+                if (orphans.isEmpty()) {
+                    val tv = TextView(this).apply {
+                        text = "✅ Nessun orfano — il Raspberry è in sync con il telefono."
+                        textSize = 13f
+                        setTextColor(Color.parseColor("#80D0A0"))
+                        setPadding(8, 8, 8, 8)
+                    }
+                    containerOrphans.addView(tv)
+                } else {
+                    val header = TextView(this).apply {
+                        text = "${orphans.size} file trovati sul Raspberry ma non sul telefono:"
+                        textSize = 12f
+                        setTextColor(Color.parseColor("#FF8080"))
+                        setPadding(8, 4, 8, 8)
+                    }
+                    containerOrphans.addView(header)
+
+                    orphans.forEach { relPath ->
+                        val tv = TextView(this).apply {
+                            text = "🗑  ${relPath.substringAfterLast('/')}"
+                            textSize = 12f
+                            setTextColor(Color.parseColor("#C0A0A0"))
+                            setPadding(16, 4, 8, 4)
+                        }
+                        containerOrphans.addView(tv)
+                    }
+                    btnDeleteOrphans.visibility = View.VISIBLE
+                }
+            }
+        }
+    }
+
+    /** Elimina tutti gli orfani dal Raspberry uno per uno */
+    private fun deleteAllOrphans() {
+        btnDeleteOrphans.isEnabled = false
+        var deleted = 0
+        var failed = 0
+        val total = currentOrphans.size
+
+        fun deleteNext(index: Int) {
+            if (index >= total) {
+                runOnUiThread {
+                    Toast.makeText(this, "✅ Eliminati $deleted/$total file dal Raspberry", Toast.LENGTH_LONG).show()
+                    btnDeleteOrphans.isEnabled = true
+                    checkOrphans() // aggiorna la lista
+                }
+                return
+            }
+            val relPath = currentOrphans[index]
+            // File locale virtuale (non esiste sul telefono, serve solo il path)
+            val dummyFile = File(Environment.getExternalStorageDirectory(), relPath)
+            ShadowClient.delete(this, relPath, dummyFile) { success ->
+                if (success) deleted++ else failed++
+                deleteNext(index + 1)
+            }
+        }
+        deleteNext(0)
     }
 
     private fun formatSize(bytes: Long): String = when {

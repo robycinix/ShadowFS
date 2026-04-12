@@ -38,7 +38,7 @@ func analyzeFile(db *sql.DB, rootPath, filePath string, info os.FileInfo) error 
 
 	// FIX CRITICO: controlla se il file esiste già nel DB tramite rel_path.
 	// Se esiste, riusa il suo UUID — evita di creare record duplicati ad ogni scansione.
-	existingFile, dbErr := GetFileByRelPath(db, relPath)
+	existingFile, dbErr := GetFileByRelPath(db, "default", relPath)
 	var fileUUID string
 	if dbErr == nil {
 		// File già noto: riusa l'UUID esistente
@@ -56,6 +56,7 @@ func analyzeFile(db *sql.DB, rootPath, filePath string, info os.FileInfo) error 
 	f := &FileData{
 		UUID:         fileUUID,
 		Filename:     info.Name(),
+		DeviceID:     "default",
 		RelPath:      relPath,
 		Size:         info.Size(),
 		Status:       "FULL",

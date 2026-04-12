@@ -10,6 +10,7 @@ import java.security.KeyStore
 import java.security.PrivateKey
 import java.security.cert.CertificateFactory
 import java.security.spec.PKCS8EncodedKeySpec
+import java.util.concurrent.Semaphore
 import javax.net.ssl.*
 
 /**
@@ -33,10 +34,14 @@ object ShadowClient {
     const val KEY_SERVER_IP = "server_ip"
     const val KEY_SERVER_PORT = "server_port"
 
+    // Upload seriale: 1 connessione alla volta — più stabile su Tailscale/rete lenta
+    private val connectionSemaphore = Semaphore(1)
+
     // CMD bytes
     private const val CMD_UPLOAD: Byte = 0x01
     private const val CMD_DOWNLOAD: Byte = 0x02
     private const val CMD_DELETE: Byte = 0x03
+    private const val CMD_SYNC_INDEX: Byte = 0x04
 
     // ----------------------------------------------------------------
     // Configurazione
@@ -77,8 +82,15 @@ object ShadowClient {
      * (es. "DCIM/Camera/video.mp4", NON il percorso assoluto Android).
      * Il callback viene eseguito in un thread di background.
      */
-    fun upload(context: Context, file: File, relPath: String, onResult: (Boolean) -> Unit) {
+    fun upload(
+        context: Context,
+        file: File,
+        relPath: String,
+        onProgress: ((transferred: Long, total: Long) -> Unit)? = null,
+        onResult: (Boolean) -> Unit
+    ) {
         Thread(Thread.currentThread().threadGroup, {
+            connectionSemaphore.acquire()
             try {
                 val ip = getServerIp(context)
                 val port = getServerPort(context)
@@ -94,16 +106,23 @@ object ShadowClient {
                     val out = BufferedOutputStream(ssl.outputStream)
                     val pathBytes = relPath.toByteArray(Charsets.UTF_8)
 
-                    out.write(CMD_UPLOAD.toInt())                          // comando
-                    out.write((pathBytes.size shr 8) and 0xFF)             // path len HIGH
-                    out.write(pathBytes.size and 0xFF)                     // path len LOW
-                    out.write(pathBytes)                                   // path
+                    out.write(CMD_UPLOAD.toInt())
+                    out.write((pathBytes.size shr 8) and 0xFF)
+                    out.write(pathBytes.size and 0xFF)
+                    out.write(pathBytes)
 
-                    FileInputStream(file).buffered(65536).use { fis ->     // file content
-                        fis.copyTo(out, bufferSize = 65536)
+                    FileInputStream(file).buffered(65536).use { fis ->
+                        val buffer = ByteArray(65536)
+                        var transferred = 0L
+                        val total = file.length()
+                        var read: Int
+                        while (fis.read(buffer).also { read = it } != -1) {
+                            out.write(buffer, 0, read)
+                            transferred += read
+                            onProgress?.invoke(transferred, total)
+                        }
                     }
                     out.flush()
-                    // La chiusura del socket (via use{}) invia close_notify TLS → il server vede EOF
                 }
 
                 Log.i(TAG, "✅ Upload completato: $relPath")
@@ -111,6 +130,8 @@ object ShadowClient {
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Upload fallito per '$relPath': ${e.message}", e)
                 onResult(false)
+            } finally {
+                connectionSemaphore.release()
             }
         }, "ShadowUpload-${file.name}").start()
     }
@@ -125,6 +146,7 @@ object ShadowClient {
      */
     fun download(context: Context, relPath: String, destFile: File, onResult: (Boolean) -> Unit) {
         Thread(Thread.currentThread().threadGroup, {
+            connectionSemaphore.acquire()
             try {
                 val ip = getServerIp(context)
                 val port = getServerPort(context)
@@ -163,6 +185,8 @@ object ShadowClient {
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Download fallito per '$relPath': ${e.message}", e)
                 onResult(false)
+            } finally {
+                connectionSemaphore.release()
             }
         }, "ShadowDownload-$relPath").start()
     }
@@ -213,6 +237,71 @@ object ShadowClient {
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Delete fallito per '$relPath': ${e.message}", e)
                 onResult(false)
+            }
+        }.start()
+    }
+
+    // ----------------------------------------------------------------
+    // SyncIndex: confronta i file sul telefono con quelli sul Raspberry
+    // Ritorna la lista di relPath che esistono sul Raspberry ma non sul telefono (orfani)
+    // ----------------------------------------------------------------
+
+    fun syncIndex(context: Context, phoneFiles: List<String>, onResult: (List<String>) -> Unit) {
+        Thread {
+            try {
+                val ip = getServerIp(context)
+                val port = getServerPort(context)
+                if (ip.isEmpty()) { onResult(emptyList()); return@Thread }
+
+                Log.i(TAG, "SyncIndex → $ip:$port | ${phoneFiles.size} file sul telefono")
+
+                val orphans = mutableListOf<String>()
+
+                createSSLSocket(ip, port).use { ssl ->
+                    val out = ssl.outputStream
+                    val inp = ssl.inputStream
+
+                    // Invia comando + count (4 byte big-endian)
+                    val count = phoneFiles.size
+                    out.write(CMD_SYNC_INDEX.toInt())
+                    out.write(count shr 24 and 0xFF)
+                    out.write(count shr 16 and 0xFF)
+                    out.write(count shr 8 and 0xFF)
+                    out.write(count and 0xFF)
+
+                    // Invia ogni path
+                    for (path in phoneFiles) {
+                        val pathBytes = path.toByteArray(Charsets.UTF_8)
+                        out.write(pathBytes.size shr 8 and 0xFF)
+                        out.write(pathBytes.size and 0xFF)
+                        out.write(pathBytes)
+                    }
+                    out.flush()
+
+                    // Legge count orfani (4 byte)
+                    val countBuf = ByteArray(4)
+                    inp.read(countBuf)
+                    val orphanCount = (countBuf[0].toInt() and 0xFF shl 24) or
+                                      (countBuf[1].toInt() and 0xFF shl 16) or
+                                      (countBuf[2].toInt() and 0xFF shl 8) or
+                                      (countBuf[3].toInt() and 0xFF)
+
+                    // Legge ogni path orfano
+                    repeat(orphanCount) {
+                        val lenBuf = ByteArray(2)
+                        inp.read(lenBuf)
+                        val pathLen = (lenBuf[0].toInt() and 0xFF shl 8) or (lenBuf[1].toInt() and 0xFF)
+                        val pathBuf = ByteArray(pathLen)
+                        inp.read(pathBuf)
+                        orphans.add(String(pathBuf, Charsets.UTF_8))
+                    }
+                }
+
+                Log.i(TAG, "✅ SyncIndex completato: ${orphans.size} orfani trovati")
+                onResult(orphans)
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ SyncIndex fallito: ${e.message}", e)
+                onResult(emptyList())
             }
         }.start()
     }

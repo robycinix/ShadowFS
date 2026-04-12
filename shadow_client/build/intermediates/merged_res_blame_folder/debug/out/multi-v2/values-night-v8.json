@@ -1,7 +1,7 @@
 {
     "logs": [
         {
-            "outputFile": "com.shadowfs.client-mergeDebugResources-29:/values-night-v8/values-night-v8.xml",
+            "outputFile": "com.shadowfs.client-mergeDebugResources-36:/values-night-v8/values-night-v8.xml",
             "map": [
                 {
                     "source": "C:\\Users\\rober\\.gradle\\caches\\transforms-3\\baa96130f1eb44c25858aee4f2df826a\\transformed\\material-1.11.0\\res\\values-night-v8\\values-night-v8.xml",

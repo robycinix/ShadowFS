@@ -16,5 +16,6 @@
       "outputFile": "shadow_client-debug.apk"
     }
   ],
-  "elementType": "File"
+  "elementType": "File",
+  "minSdkVersionForDexing": 29
 }

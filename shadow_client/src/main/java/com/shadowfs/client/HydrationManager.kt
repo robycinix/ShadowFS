@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import android.os.FileObserver
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.io.File
@@ -31,6 +32,44 @@ class HydrationManager(private val context: Context, private val rootDir: String
 
     // File in fase di ghosting: l'idratazione è soppressa finché non scade il timer
     private val suppressedFiles = ConcurrentHashMap.newKeySet<String>()
+
+    private val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+
+    /** Ritorna true solo se lo schermo è acceso e il telefono è in uso attivo. */
+    private fun isScreenOn(): Boolean = powerManager.isInteractive
+
+    // Rate limiter: traccia gli accessi recenti a file DISTINTI
+    // Se > 3 file diversi in 3 secondi → prefetching galleria → sopprimi
+    private val recentAccessedFiles = mutableListOf<Pair<Long, String>>() // timestamp + path
+    private val RATE_WINDOW_MS = 3_000L
+    private val RATE_THRESHOLD = 3
+    private var suppressUntil = 0L
+
+    private fun isRateLimited(filePath: String): Boolean {
+        val now = System.currentTimeMillis()
+
+        // Se siamo in periodo di soppressione attivo, aspetta
+        if (now < suppressUntil) return true
+
+        synchronized(recentAccessedFiles) {
+            // Rimuovi accessi più vecchi della finestra
+            recentAccessedFiles.removeAll { it.first < now - RATE_WINDOW_MS }
+
+            // Aggiungi solo se file non già presente nella finestra
+            if (recentAccessedFiles.none { it.second == filePath }) {
+                recentAccessedFiles.add(Pair(now, filePath))
+            }
+
+            // Se troppi file distinti in poco tempo → prefetching → sopprimi per 30s
+            if (recentAccessedFiles.size > RATE_THRESHOLD) {
+                suppressUntil = now + 30_000L
+                recentAccessedFiles.clear()
+                Log.d(TAG, "Prefetching rilevato — idratazione soppressa per 30s")
+                return true
+            }
+        }
+        return false
+    }
 
     /** Sopprime l'idratazione per [path] per [durationMs] ms (chiamare prima di markAsGhost). */
     fun suppressHydration(path: String, durationMs: Long = 60_000L) {
@@ -69,8 +108,12 @@ class HydrationManager(private val context: Context, private val rootDir: String
                 }
 
                 if (event == OPEN) {
-                    // Controlla se è un file ghost: ha il marker .shadow
-                    // (il file può avere 0 byte oppure contenere un thumbnail — entrambi sono ghost)
+                    // Filtro 1: schermo spento = processo di sistema
+                    if (!isScreenOn()) return
+
+                    // Filtro 2: troppi file diversi in poco tempo = prefetching galleria
+                    if (isRateLimited(file.absolutePath)) return
+
                     val shadowMarker = File(file.parent, file.name + ".shadow")
                     val originalSize = readOriginalSize(shadowMarker)
                     if (file.exists() && file.isFile && shadowMarker.exists() &&
@@ -79,8 +122,8 @@ class HydrationManager(private val context: Context, private val rootDir: String
                         val now = System.currentTimeMillis()
                         val lastRequest = activeHydrations[file.absolutePath] ?: 0L
 
-                        // Debouncer: ignora eventi ripetuti entro 10 secondi
-                        if (now - lastRequest > 10_000) {
+                        // Debouncer: ignora eventi ripetuti entro 30 secondi
+                        if (now - lastRequest > 30_000) {
                             activeHydrations[file.absolutePath] = now
                             triggerHydration(file)
                         }

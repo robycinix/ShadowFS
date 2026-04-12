@@ -1,5 +1,5 @@
 plugins {
-    id("com.android.application") version "8.2.2"
+    id("com.android.application") version "8.7.3"
     id("org.jetbrains.kotlin.android") version "1.9.22"
 }
 
@@ -10,7 +10,7 @@ android {
     defaultConfig {
         applicationId = "com.shadowfs.client"
         minSdk = 29
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -42,10 +42,10 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
 
     // QR Code scanner (CameraX + ML Kit)
-    implementation("androidx.camera:camera-camera2:1.3.1")
-    implementation("androidx.camera:camera-lifecycle:1.3.1")
-    implementation("androidx.camera:camera-view:1.3.1")
-    implementation("com.google.mlkit:barcode-scanning:17.2.0")
+    implementation("androidx.camera:camera-camera2:1.3.4")
+    implementation("androidx.camera:camera-lifecycle:1.3.4")
+    implementation("androidx.camera:camera-view:1.3.4")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     // Test
     testImplementation("junit:junit:4.13.2")

@@ -79,6 +79,8 @@ func handleTCPConnection(conn net.Conn, db *sql.DB, storagePath string) {
 		handleDownload(conn, db, deviceStorage, deviceID)
 	case 3:
 		handleDelete(conn, db, deviceStorage, deviceID)
+	case 4:
+		handleSyncIndex(conn, db, deviceID)
 	default:
 		log.Printf("[TCP] ⚠️ Comando sconosciuto: %d", cmdBuf[0])
 	}
@@ -156,9 +158,9 @@ func handleStream(stream quic.Stream, db *sql.DB, storagePath string) {
 
 	switch cmdBuf[0] {
 	case 1:
-		handleUpload(stream, db, storagePath)
+		handleUpload(stream, db, storagePath, "quic-client")
 	case 2:
-		handleDownload(stream, db, storagePath)
+		handleDownload(stream, db, storagePath, "quic-client")
 	default:
 		log.Printf("[QUIC] ⚠️ Comando sconosciuto: %d", cmdBuf[0])
 	}
@@ -320,6 +322,72 @@ func handleDelete(rw io.ReadWriter, db *sql.DB, storagePath, deviceID string) {
 
 	log.Printf("🗑️  [Delete] File eliminato: %s", fullPath)
 	rw.Write([]byte{0x01}) // OK
+}
+
+// handleSyncIndex: riceve la lista di relPath presenti sul telefono,
+// risponde con i relPath che esistono sul Raspberry ma NON nella lista → orfani.
+// Protocollo:
+//   Android → Raspberry: [4B count][per ogni file: 2B len + path UTF-8]
+//   Raspberry → Android: [4B count_orfani][per ogni orfano: 2B len + path UTF-8]
+func handleSyncIndex(rw io.ReadWriter, db *sql.DB, deviceID string) {
+	log.Printf("[SyncIndex] Sincronizzazione indice per device: %s", deviceID)
+
+	// 1. Legge quanti file manda il telefono
+	countBuf := make([]byte, 4)
+	if _, err := io.ReadFull(rw, countBuf); err != nil {
+		log.Printf("[SyncIndex] Errore lettura count: %v", err)
+		return
+	}
+	count := int(countBuf[0])<<24 | int(countBuf[1])<<16 | int(countBuf[2])<<8 | int(countBuf[3])
+
+	// 2. Legge la lista di path dal telefono
+	phoneFiles := make(map[string]bool)
+	for i := 0; i < count; i++ {
+		lenBuf := make([]byte, 2)
+		if _, err := io.ReadFull(rw, lenBuf); err != nil {
+			return
+		}
+		pathLen := int(lenBuf[0])<<8 | int(lenBuf[1])
+		pathBuf := make([]byte, pathLen)
+		if _, err := io.ReadFull(rw, pathBuf); err != nil {
+			return
+		}
+		phoneFiles[string(pathBuf)] = true
+	}
+
+	// 3. Recupera dal DB tutti i file del dispositivo
+	rows, err := db.Query("SELECT rel_path FROM files WHERE device_id = ?", deviceID)
+	if err != nil {
+		log.Printf("[SyncIndex] Errore query DB: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	var orphans []string
+	for rows.Next() {
+		var relPath string
+		if err := rows.Scan(&relPath); err != nil {
+			continue
+		}
+		if !phoneFiles[relPath] {
+			orphans = append(orphans, relPath)
+		}
+	}
+
+	// 4. Invia la lista degli orfani al telefono
+	orphanCount := len(orphans)
+	log.Printf("[SyncIndex] Orfani trovati: %d su %d file totali nel DB", orphanCount, len(phoneFiles))
+
+	resp := []byte{
+		byte(orphanCount >> 24), byte(orphanCount >> 16),
+		byte(orphanCount >> 8), byte(orphanCount),
+	}
+	for _, path := range orphans {
+		pathBytes := []byte(path)
+		resp = append(resp, byte(len(pathBytes)>>8), byte(len(pathBytes)))
+		resp = append(resp, pathBytes...)
+	}
+	rw.Write(resp)
 }
 
 // ============================================================

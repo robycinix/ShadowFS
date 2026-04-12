@@ -11,15 +11,50 @@ import androidx.core.app.NotificationCompat
 import java.io.File
 import java.util.Timer
 import java.util.TimerTask
+import java.util.concurrent.atomic.AtomicInteger
 
 class ShadowForegroundService : Service() {
 
     private val CHANNEL_ID = "ShadowFS_Channel"
+    private val CHANNEL_TRANSFER_ID = "ShadowFS_Transfer"
+    private val NOTIF_TRANSFER_ID = 50
     private val MONITORED_DIR = "/storage/emulated/0"
 
     private lateinit var vfsManager: VfsManager
     private lateinit var hydrationManager: HydrationManager
     private val scanTimer = Timer()
+
+    // Contatore upload attivi (per aggiornare la progress notification)
+    private val activeUploads = AtomicInteger(0)
+
+    // ----------------------------------------------------------------
+    // Retry queue — file in storage interno, una relPath per riga
+    // ----------------------------------------------------------------
+
+    private val retryQueueFile get() = File(filesDir, "upload_retry_queue.txt")
+
+    @Synchronized
+    private fun addToRetryQueue(relPath: String) {
+        val existing = if (retryQueueFile.exists())
+            retryQueueFile.readLines().filter { it.isNotBlank() }.toMutableSet()
+        else mutableSetOf()
+        existing.add(relPath)
+        retryQueueFile.writeText(existing.joinToString("\n"))
+    }
+
+    @Synchronized
+    private fun removeFromRetryQueue(relPath: String) {
+        if (!retryQueueFile.exists()) return
+        val existing = retryQueueFile.readLines().filter { it.isNotBlank() && it != relPath }
+        if (existing.isEmpty()) retryQueueFile.delete()
+        else retryQueueFile.writeText(existing.joinToString("\n"))
+    }
+
+    @Synchronized
+    private fun getRetryQueue(): List<String> =
+        if (retryQueueFile.exists())
+            retryQueueFile.readLines().filter { it.isNotBlank() }
+        else emptyList()
 
     // --- REGOLE INTELLIGENTI DI GHOSTING ---
 
@@ -41,6 +76,7 @@ class ShadowForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        createTransferNotificationChannel()
         startForeground(1, createNotification())
 
         vfsManager = VfsManager()
@@ -69,6 +105,21 @@ class ShadowForegroundService : Service() {
         if (totalSpace == 0L) return
         val freePercentage = (usableSpace.toDouble() / totalSpace.toDouble()) * 100
 
+        // --- RETRY degli upload falliti nei cicli precedenti ---
+        val retryQueue = getRetryQueue()
+        if (retryQueue.isNotEmpty()) {
+            android.util.Log.i("ShadowFS", "Retry queue: ${retryQueue.size} file da riprovare")
+            retryQueue.forEach { relPath ->
+                val file = File("$MONITORED_DIR/$relPath")
+                if (!file.exists() || file.length() == 0L) {
+                    removeFromRetryQueue(relPath) // già ghostato o eliminato
+                    return@forEach
+                }
+                hydrationManager.suppressHydration(file.absolutePath)
+                uploadFile(file, relPath, isRetry = true)
+            }
+        }
+
         // Avvia il ghosting se lo spazio è sotto il 15% OPPURE se forzato dall'utente
         if (force || freePercentage < 15.0) {
             val thresholdTime = System.currentTimeMillis() - (3L * 24 * 60 * 60 * 1000) // 3 giorni fa
@@ -86,21 +137,9 @@ class ShadowForegroundService : Service() {
                     (force || file.lastModified() < thresholdTime)
                 }
                 .forEach { file ->
-                    // Calcola il percorso relativo rispetto alla root monitorata
                     val relPath = file.absolutePath.removePrefix(MONITORED_DIR).trimStart('/')
-
-                    // Sopprime l'idratazione durante il ghosting (evita loop upload→ghost→hydrate)
                     hydrationManager.suppressHydration(file.absolutePath)
-
-                    // Invia il file al Raspberry Pi via TLS mTLS REALE
-                    ShadowClient.upload(this, file, relPath) { success ->
-                        if (success) {
-                            vfsManager.markAsGhost(file)
-                        } else {
-                            android.util.Log.w("ShadowFS", "Upload fallito per $relPath — file non ghostato")
-                            notifyRaspberryUnreachable()
-                        }
-                    }
+                    uploadFile(file, relPath, isRetry = false)
                 }
         }
 
@@ -127,12 +166,8 @@ class ShadowForegroundService : Service() {
                                     .removePrefix(MONITORED_DIR).trimStart('/')
 
                                 hydrationManager.suppressHydration(originalFile.absolutePath)
-                                ShadowClient.upload(this, originalFile, relPath) { success ->
-                                    if (success) {
-                                        vfsManager.markAsGhost(originalFile)
-                                        markerFile.delete()
-                                        android.util.Log.i("ShadowFS", "Re-Ghost completato: $originalFileName")
-                                    }
+                                uploadFile(originalFile, relPath, isRetry = false) { success ->
+                                    if (success) markerFile.delete()
                                 }
                             } else {
                                 android.util.Log.d("ShadowFS", "File $originalFileName recente — re-ghosting rimandato")
@@ -145,6 +180,67 @@ class ShadowForegroundService : Service() {
                     android.util.Log.e("ShadowFS", "Errore re-ghosting: ${e.message}")
                 }
             }
+    }
+
+    // ----------------------------------------------------------------
+    // Upload con progress bar e retry automatico
+    // ----------------------------------------------------------------
+
+    private fun uploadFile(
+        file: File,
+        relPath: String,
+        isRetry: Boolean,
+        onDone: ((Boolean) -> Unit)? = null
+    ) {
+        val fileSize = file.length()
+        val showProgress = fileSize > 5 * 1024 * 1024 // progress solo per file > 5 MB
+        activeUploads.incrementAndGet()
+
+        ShadowClient.upload(
+            context = this,
+            file = file,
+            relPath = relPath,
+            onProgress = if (showProgress) { transferred, total ->
+                updateTransferNotification(file.name, transferred, total)
+            } else null
+        ) { success ->
+            activeUploads.decrementAndGet()
+            if (activeUploads.get() == 0) dismissTransferNotification()
+
+            if (success) {
+                vfsManager.markAsGhost(file)
+                removeFromRetryQueue(relPath)
+                if (isRetry) android.util.Log.i("ShadowFS", "✅ Retry riuscito: $relPath")
+            } else {
+                android.util.Log.w("ShadowFS", "Upload fallito per $relPath — aggiunto alla coda retry")
+                addToRetryQueue(relPath)
+                notifyRaspberryUnreachable()
+            }
+            onDone?.invoke(success)
+        }
+    }
+
+    private fun updateTransferNotification(fileName: String, transferred: Long, total: Long) {
+        val progress = if (total > 0) ((transferred * 100) / total).toInt() else 0
+        val notif = NotificationCompat.Builder(this, CHANNEL_TRANSFER_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_upload)
+            .setContentTitle("ShadowFS — Upload in corso")
+            .setContentText("$fileName  ${formatSize(transferred)} / ${formatSize(total)}")
+            .setProgress(100, progress, false)
+            .setOngoing(true)
+            .setSilent(true)
+            .build()
+        getSystemService(NotificationManager::class.java).notify(NOTIF_TRANSFER_ID, notif)
+    }
+
+    private fun dismissTransferNotification() {
+        getSystemService(NotificationManager::class.java).cancel(NOTIF_TRANSFER_ID)
+    }
+
+    private fun formatSize(bytes: Long): String = when {
+        bytes >= 1_073_741_824L -> "%.1f GB".format(bytes / 1_073_741_824.0)
+        bytes >= 1_048_576L     -> "%.1f MB".format(bytes / 1_048_576.0)
+        else                    -> "%.0f KB".format(bytes / 1_024.0)
     }
 
     private var lastUnreachableNotifTime = 0L
@@ -173,6 +269,18 @@ class ShadowForegroundService : Service() {
                 "Shadow Daemon Core",
                 NotificationManager.IMPORTANCE_LOW
             )
+            getSystemService(NotificationManager::class.java)
+                .createNotificationChannel(channel)
+        }
+    }
+
+    private fun createTransferNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_TRANSFER_ID,
+                "ShadowFS Trasferimenti",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply { setShowBadge(false) }
             getSystemService(NotificationManager::class.java)
                 .createNotificationChannel(channel)
         }

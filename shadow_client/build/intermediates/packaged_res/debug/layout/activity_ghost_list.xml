@@ -87,4 +87,62 @@
         android:gravity="center"
         android:visibility="gone"/>
 
+    <!-- Sezione orfani -->
+    <View android:layout_width="match_parent" android:layout_height="1dp"
+        android:background="#2A2A3A"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🗑 File orfani sul Raspberry"
+            android:textColor="#FF8080"
+            android:textSize="13sp"
+            android:textStyle="bold"/>
+
+        <Button
+            android:id="@+id/btn_sync"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔍 Controlla"
+            android:backgroundTint="#3A1A1A"
+            android:textColor="#FF8080"
+            android:textSize="12sp"/>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tv_orphans_info"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="File presenti sul Raspberry ma eliminati dal telefono."
+        android:textColor="#606070"
+        android:textSize="11sp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp"/>
+
+    <LinearLayout
+        android:id="@+id/container_orphans"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="8dp"/>
+
+    <Button
+        android:id="@+id/btn_delete_orphans"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="🗑 Elimina tutti gli orfani dal Raspberry"
+        android:backgroundTint="#3A1A1A"
+        android:textColor="#FF6060"
+        android:layout_margin="8dp"
+        android:visibility="gone"/>
+
 </LinearLayout>
