@@ -29,6 +29,17 @@ class HydrationManager(private val context: Context, private val rootDir: String
     // Mappa anti-spam: evita di inviare richieste duplicate per lo stesso file
     private val activeHydrations = ConcurrentHashMap<String, Long>()
 
+    // File in fase di ghosting: l'idratazione è soppressa finché non scade il timer
+    private val suppressedFiles = ConcurrentHashMap.newKeySet<String>()
+
+    /** Sopprime l'idratazione per [path] per [durationMs] ms (chiamare prima di markAsGhost). */
+    fun suppressHydration(path: String, durationMs: Long = 60_000L) {
+        suppressedFiles.add(path)
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            suppressedFiles.remove(path)
+        }, durationMs)
+    }
+
     private val observers = mutableListOf<FileObserver>()
 
     init {
@@ -58,9 +69,12 @@ class HydrationManager(private val context: Context, private val rootDir: String
                 }
 
                 if (event == OPEN) {
-                    // Controlla se è un file ghost: 0 byte + file .shadow associato
+                    // Controlla se è un file ghost: ha il marker .shadow
+                    // (il file può avere 0 byte oppure contenere un thumbnail — entrambi sono ghost)
                     val shadowMarker = File(file.parent, file.name + ".shadow")
-                    if (file.exists() && file.isFile && file.length() == 0L && shadowMarker.exists()) {
+                    val originalSize = readOriginalSize(shadowMarker)
+                    if (file.exists() && file.isFile && shadowMarker.exists() &&
+                        file.length() < originalSize && !suppressedFiles.contains(file.absolutePath)) {
 
                         val now = System.currentTimeMillis()
                         val lastRequest = activeHydrations[file.absolutePath] ?: 0L
@@ -118,6 +132,24 @@ class HydrationManager(private val context: Context, private val rootDir: String
                 showFailureNotification(notificationId, file.name)
             }
             activeHydrations.remove(file.absolutePath) // Sblocca il debouncer
+        }
+    }
+
+    /**
+     * Legge la dimensione originale del file dal marker .shadow.
+     * Ritorna Long.MAX_VALUE se il marker non esiste o non è leggibile
+     * (così la condizione file.length() < originalSize non scatta mai per errore).
+     */
+    private fun readOriginalSize(shadowFile: File): Long {
+        if (!shadowFile.exists()) return Long.MAX_VALUE
+        return try {
+            shadowFile.readLines()
+                .firstOrNull { it.startsWith("originalSize=") }
+                ?.removePrefix("originalSize=")
+                ?.toLong()
+                ?: Long.MAX_VALUE
+        } catch (e: Exception) {
+            Long.MAX_VALUE
         }
     }
 

@@ -2991,6 +2991,8 @@ drawable ic_call_decline_low
 drawable ic_clear_black_24
 drawable ic_clock_black_24dp
 drawable ic_keyboard_black_24dp
+drawable ic_launcher_background
+drawable ic_launcher_foreground
 drawable ic_m3_chip_check
 drawable ic_m3_chip_checked_circle
 drawable ic_m3_chip_close
@@ -3172,6 +3174,13 @@ id bounce
 id bounceBoth
 id bounceEnd
 id bounceStart
+id btn_discover
+id btn_force_offload
+id btn_ghost_list
+id btn_permission
+id btn_save_config
+id btn_start_service
+id btn_test_connection
 id buttonPanel
 id cache_measures
 id callMeasure
@@ -3199,6 +3208,7 @@ id compress
 id confirm_button
 id constraint
 id container
+id container_ghost_list
 id content
 id contentPanel
 id contiguous
@@ -3253,6 +3263,8 @@ id end
 id endToStart
 id enterAlways
 id enterAlwaysCollapsed
+id et_server_ip
+id et_server_port
 id exitUntilCollapsed
 id expand_activities_button
 id expanded_menu
@@ -3547,6 +3559,15 @@ id transition_position
 id transition_scene_layoutid_cache
 id transition_transform
 id triangle
+id tv_cert_path
+id tv_cert_status
+id tv_empty
+id tv_ghost_count
+id tv_ghost_status
+id tv_ghost_summary
+id tv_recovered_total
+id tv_space
+id tv_status
 id unchecked
 id uniform
 id unlabeled
@@ -3684,6 +3705,8 @@ layout abc_search_dropdown_item_icons_2line
 layout abc_search_view
 layout abc_select_dialog_material
 layout abc_tooltip
+layout activity_ghost_list
+layout activity_main
 layout custom_dialog
 layout design_bottom_navigation_item
 layout design_bottom_sheet_dialog
@@ -3763,6 +3786,7 @@ layout select_dialog_item_material
 layout select_dialog_multichoice_material
 layout select_dialog_singlechoice_material
 layout support_simple_spinner_dropdown_item
+mipmap ic_launcher
 plurals mtrl_badge_content_description
 string abc_action_bar_home_description
 string abc_action_bar_up_description
@@ -3792,6 +3816,7 @@ string abc_shareactionprovider_share_with
 string abc_shareactionprovider_share_with_application
 string abc_toolbar_collapse_description
 string androidx_startup
+string app_name
 string appbar_scrolling_view_behavior
 string bottom_sheet_behavior
 string bottomsheet_action_collapse
@@ -3816,6 +3841,7 @@ string exposed_dropdown_menu_content_description
 string fab_transformation_scrim_behavior
 string fab_transformation_sheet_behavior
 string hide_bottom_view_on_scroll_behavior
+string hydration_channel_name
 string icon_content_description
 string item_view_role_description
 string m3_exceed_max_badge_text_suffix
@@ -3927,6 +3953,7 @@ string search_menu_title
 string searchbar_scrolling_view_behavior
 string searchview_clear_text_content_description
 string searchview_navigation_content_description
+string service_channel_name
 string side_sheet_accessibility_pane_title
 string side_sheet_behavior
 string status_bar_notification_info_overflow

@@ -104,14 +104,31 @@
                 android:padding="12dp" />
         </LinearLayout>
 
-        <Button
-            android:id="@+id/btn_save_config"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="💾 Salva Configurazione"
-            android:backgroundTint="#2A3A6A"
-            android:textColor="#A0B8FF"
-            android:layout_marginBottom="16dp" />
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <Button
+                android:id="@+id/btn_save_config"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="💾 Salva"
+                android:backgroundTint="#2A3A6A"
+                android:textColor="#A0B8FF"
+                android:layout_marginEnd="8dp"/>
+
+            <Button
+                android:id="@+id/btn_discover"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="🔍 Cerca in Wi-Fi"
+                android:backgroundTint="#1A3A3A"
+                android:textColor="#60D0D0"/>
+        </LinearLayout>
 
         <Button
             android:id="@+id/btn_test_connection"
@@ -120,6 +137,15 @@
             android:text="🔌 Testa Connessione mTLS"
             android:backgroundTint="#1A3A2A"
             android:textColor="#80D0A0"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btn_qr_scan"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📷 Pairing via QR Code"
+            android:backgroundTint="#2A1A3A"
+            android:textColor="#C080FF"
             android:layout_marginBottom="16dp" />
 
         <!-- Divider -->
@@ -212,6 +238,31 @@
             android:textColor="#FF8080"
             android:enabled="false"
             android:layout_marginBottom="24dp" />
+
+        <!-- Divider -->
+        <View android:layout_width="match_parent" android:layout_height="1dp"
+            android:background="#2A2A3A" android:layout_marginBottom="16dp"/>
+
+        <!-- Pulsante lista file ghostati -->
+        <Button
+            android:id="@+id/btn_ghost_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="👻 Vedi File Ghostati"
+            android:backgroundTint="#1A1A3A"
+            android:textColor="#8080FF"
+            android:layout_marginBottom="16dp"/>
+
+        <!-- Sommario spazio recuperato -->
+        <TextView
+            android:id="@+id/tv_ghost_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#80D0A0"
+            android:textSize="13sp"
+            android:gravity="center"
+            android:layout_marginBottom="16dp"/>
 
         <!-- Footer info -->
         <TextView

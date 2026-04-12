@@ -1,7 +1,10 @@
 package com.shadowfs.client
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -35,6 +38,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnForceOffload: Button
     private lateinit var btnTestConnection: Button
     private lateinit var tvCertPath: TextView
+    private lateinit var btnGhostList: Button
+    private lateinit var tvGhostSummary: TextView
+    private lateinit var btnDiscover: Button
+    private lateinit var btnQrScan: Button
+
+    private var nsdManager: NsdManager? = null
+    private var discoveryListener: NsdManager.DiscoveryListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,7 +71,11 @@ class MainActivity : AppCompatActivity() {
         btnStartService = findViewById(R.id.btn_start_service)
         btnForceOffload = findViewById(R.id.btn_force_offload)
         btnTestConnection = findViewById(R.id.btn_test_connection)
-        tvCertPath      = findViewById(R.id.tv_cert_path)
+        tvCertPath        = findViewById(R.id.tv_cert_path)
+        btnGhostList      = findViewById(R.id.btn_ghost_list)
+        tvGhostSummary    = findViewById(R.id.tv_ghost_summary)
+        btnDiscover       = findViewById(R.id.btn_discover)
+        btnQrScan         = findViewById(R.id.btn_qr_scan)
     }
 
     private fun setupListeners() {
@@ -113,6 +127,21 @@ class MainActivity : AppCompatActivity() {
             }
             // Breve delay prima di aggiornare UI per dare tempo al servizio di avviarsi
             btnStartService.postDelayed({ refreshUI() }, 500)
+        }
+
+        // Apri la lista file ghostati
+        btnGhostList.setOnClickListener {
+            startActivity(Intent(this, GhostListActivity::class.java))
+        }
+
+        // Scopri il Raspberry tramite mDNS
+        btnDiscover.setOnClickListener {
+            startMdnsDiscovery()
+        }
+
+        // Pairing via QR Code
+        btnQrScan.setOnClickListener {
+            startActivity(Intent(this, QrScanActivity::class.java))
         }
 
         // Forza lo svuotamento immediato dei file idonei
@@ -181,6 +210,9 @@ class MainActivity : AppCompatActivity() {
         btnStartService.text = if (running) "⏹ Ferma Shadow Daemon" else "▶ Avvia Shadow Daemon"
         btnForceOffload.isEnabled = running && hasPermission && certsOk && ShadowClient.isConfigured(this)
 
+        // Lista file ghostati
+        refreshGhostList()
+
         // Stato generale
         if (!ShadowClient.isConfigured(this)) {
             tvStatus.text = "⚙️ Configura l'IP del Raspberry Pi per iniziare"
@@ -193,6 +225,115 @@ class MainActivity : AppCompatActivity() {
         } else {
             tvStatus.text = "⏸ Daemon non avviato — premi Avvia per proteggere la memoria"
         }
+    }
+
+    /** Avvia la scoperta mDNS del Raspberry sulla rete locale */
+    private fun startMdnsDiscovery() {
+        stopMdnsDiscovery()
+        btnDiscover.isEnabled = false
+        btnDiscover.text = "🔍 Ricerca..."
+        tvStatus.text = "🔄 Cerco il Raspberry in rete..."
+
+        nsdManager = getSystemService(Context.NSD_SERVICE) as NsdManager
+
+        val resolveListener = object : NsdManager.ResolveListener {
+            override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
+                runOnUiThread {
+                    tvStatus.text = "❌ Raspberry trovato ma indirizzo non risolvibile"
+                    resetDiscoverButton()
+                }
+            }
+
+            override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
+                val host = serviceInfo.host?.hostAddress ?: return
+                val port = serviceInfo.port
+                runOnUiThread {
+                    etServerIp.setText(host)
+                    etServerPort.setText(port.toString())
+                    ShadowClient.saveConfig(this@MainActivity, host, port)
+                    toast("✅ Raspberry trovato: $host:$port")
+                    tvStatus.text = "✅ Raspberry trovato automaticamente: $host"
+                    resetDiscoverButton()
+                    refreshUI()
+                }
+                stopMdnsDiscovery()
+            }
+        }
+
+        discoveryListener = object : NsdManager.DiscoveryListener {
+            override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
+                runOnUiThread {
+                    tvStatus.text = "❌ Impossibile avviare la ricerca mDNS (errore $errorCode)"
+                    resetDiscoverButton()
+                }
+            }
+            override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
+            override fun onDiscoveryStarted(serviceType: String) {}
+            override fun onDiscoveryStopped(serviceType: String) {}
+
+            override fun onServiceFound(serviceInfo: NsdServiceInfo) {
+                nsdManager?.resolveService(serviceInfo, resolveListener)
+            }
+            override fun onServiceLost(serviceInfo: NsdServiceInfo) {}
+        }
+
+        nsdManager?.discoverServices("_shadowfs._tcp.", NsdManager.PROTOCOL_DNS_SD, discoveryListener)
+
+        // Timeout: se non trovato entro 10s, mostra messaggio
+        btnDiscover.postDelayed({
+            if (!btnDiscover.isEnabled) {
+                stopMdnsDiscovery()
+                tvStatus.text = "⚠️ Nessun Raspberry trovato in rete. Inserisci l'IP manualmente."
+                resetDiscoverButton()
+            }
+        }, 10_000)
+    }
+
+    private fun stopMdnsDiscovery() {
+        try {
+            discoveryListener?.let { nsdManager?.stopServiceDiscovery(it) }
+        } catch (_: Exception) {}
+        discoveryListener = null
+    }
+
+    private fun resetDiscoverButton() {
+        btnDiscover.isEnabled = true
+        btnDiscover.text = "🔍 Cerca in Wi-Fi"
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopMdnsDiscovery()
+    }
+
+    /** Mostra nella home solo il sommario (count + spazio recuperato) */
+    private fun refreshGhostList() {
+        val root = File(Environment.getExternalStorageDirectory().absolutePath)
+        val shadowFiles = root.walkTopDown()
+            .filter { it.isFile && it.name.endsWith(".shadow") }
+            .toList()
+
+        if (shadowFiles.isEmpty()) {
+            tvGhostSummary.text = ""
+            btnGhostList.text = "👻 Vedi File Ghostati"
+            return
+        }
+
+        val totalRecovered = shadowFiles.sumOf { shadowFile ->
+            shadowFile.readLines()
+                .firstOrNull { it.startsWith("originalSize=") }
+                ?.removePrefix("originalSize=")?.toLongOrNull() ?: 0L
+        }
+
+        btnGhostList.text = "👻 Vedi File Ghostati (${shadowFiles.size})"
+        tvGhostSummary.text = "Spazio recuperato: ${formatSize(totalRecovered)}"
+    }
+
+    private fun formatSize(bytes: Long): String = when {
+        bytes >= 1_073_741_824L -> "%.1f GB".format(bytes / 1_073_741_824.0)
+        bytes >= 1_048_576L     -> "%.1f MB".format(bytes / 1_048_576.0)
+        bytes >= 1_024L         -> "%.0f KB".format(bytes / 1_024.0)
+        else                    -> "$bytes B"
     }
 
     /** Controlla se il ForegroundService è in esecuzione */

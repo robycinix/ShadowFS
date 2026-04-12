@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"net"
 	"os"
@@ -41,6 +42,14 @@ func GenerateMTLSCertificates(outDir string, serverIPs []net.IP) error {
 		return err
 	}
 	if err := savePEM(filepath.Join(outDir, "ca.crt"), "CERTIFICATE", caBytes); err != nil {
+		return err
+	}
+	// Salva anche la CA key — necessaria per generare certificati per nuovi dispositivi
+	caKeyBytes, err := x509.MarshalPKCS8PrivateKey(caPrivKey)
+	if err != nil {
+		return err
+	}
+	if err := savePEM(filepath.Join(outDir, "ca.key"), "PRIVATE KEY", caKeyBytes); err != nil {
 		return err
 	}
 
@@ -107,6 +116,74 @@ func GenerateMTLSCertificates(outDir string, serverIPs []net.IP) error {
 	if err := savePEM(filepath.Join(outDir, "client.key"), "PRIVATE KEY", clientKeyBytes); err != nil {
 		return err
 	}
+
+	return nil
+}
+
+// GenerateDeviceCertificate genera un certificato client per un nuovo dispositivo
+// usando la CA già esistente. deviceID diventa il CN del certificato.
+func GenerateDeviceCertificate(certsDir, deviceID string) error {
+	outDir := filepath.Join(certsDir, "..", "certs_for_android_"+deviceID)
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		return err
+	}
+
+	// Carica la CA esistente
+	caKeyPEM, err := os.ReadFile(filepath.Join(certsDir, "ca.key"))
+	if err != nil {
+		return fmt.Errorf("impossibile leggere ca.key: %v", err)
+	}
+	caCertPEM, err := os.ReadFile(filepath.Join(certsDir, "ca.crt"))
+	if err != nil {
+		return fmt.Errorf("impossibile leggere ca.crt: %v", err)
+	}
+
+	caKeyBlock, _ := pem.Decode(caKeyPEM)
+	caKeyIface, err := x509.ParsePKCS8PrivateKey(caKeyBlock.Bytes)
+	if err != nil {
+		return fmt.Errorf("impossibile parsare ca.key: %v", err)
+	}
+	caPrivKey := caKeyIface.(*rsa.PrivateKey)
+
+	caCertBlock, _ := pem.Decode(caCertPEM)
+	caCert, err := x509.ParseCertificate(caCertBlock.Bytes)
+	if err != nil {
+		return fmt.Errorf("impossibile parsare ca.crt: %v", err)
+	}
+
+	// Genera certificato client con CN=deviceID
+	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	clientTemplate := &x509.Certificate{
+		SerialNumber: serial,
+		Subject:      pkix.Name{Organization: []string{"ShadowClient Android"}, CommonName: deviceID},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().AddDate(5, 0, 0),
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+	}
+
+	clientPrivKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return err
+	}
+	clientBytes, err := x509.CreateCertificate(rand.Reader, clientTemplate, caCert, &clientPrivKey.PublicKey, caPrivKey)
+	if err != nil {
+		return err
+	}
+
+	if err := savePEM(filepath.Join(outDir, "client.crt"), "CERTIFICATE", clientBytes); err != nil {
+		return err
+	}
+	clientKeyBytes, err := x509.MarshalPKCS8PrivateKey(clientPrivKey)
+	if err != nil {
+		return err
+	}
+	if err := savePEM(filepath.Join(outDir, "client.key"), "PRIVATE KEY", clientKeyBytes); err != nil {
+		return err
+	}
+	// Copia la CA (stessa per tutti i dispositivi)
+	caData, _ := os.ReadFile(filepath.Join(certsDir, "ca.crt"))
+	os.WriteFile(filepath.Join(outDir, "ca.crt"), caData, 0644)
 
 	return nil
 }

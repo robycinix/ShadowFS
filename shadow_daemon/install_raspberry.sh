@@ -151,7 +151,27 @@ systemctl daemon-reload
 systemctl enable shadowfs.service
 systemctl start shadowfs.service
 
-# 7. Firewall — apri porta TCP 4243
+# 7. Avahi mDNS — annuncia il servizio sulla rete locale
+echo -e "${GREEN}[5b] Configurazione mDNS (avahi-daemon)...${NC}"
+apt-get install -y -q avahi-daemon
+
+cat <<EOF > /etc/avahi/services/shadowfs.service
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<service-group>
+  <name replace-wildcards="yes">ShadowFS su %h</name>
+  <service>
+    <type>_shadowfs._tcp</type>
+    <port>4243</port>
+  </service>
+</service-group>
+EOF
+
+systemctl enable avahi-daemon
+systemctl restart avahi-daemon
+echo "   mDNS attivo — il telefono Android può trovare questo Raspberry automaticamente."
+
+# 8. Firewall — apri porta TCP 4243
 echo "   Apertura porta TCP 4243 sul firewall..."
 if command -v ufw &> /dev/null; then
     ufw allow 4243/tcp 2>/dev/null || true

@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -54,7 +55,16 @@ func StartTCPServer(addr, certFile, keyFile, caFile string, db *sql.DB, storageP
 
 func handleTCPConnection(conn net.Conn, db *sql.DB, storagePath string) {
 	defer conn.Close()
-	log.Printf("🔒 [TCP] Nuova connessione mTLS da: %s", conn.RemoteAddr())
+
+	deviceID := getDeviceID(conn)
+	log.Printf("🔒 [TCP] Nuova connessione mTLS da: %s (device: %s)", conn.RemoteAddr(), deviceID)
+
+	// Ogni dispositivo ha la sua sottocartella di storage isolata
+	deviceStorage := filepath.Join(storagePath, deviceID)
+	if err := os.MkdirAll(deviceStorage, 0755); err != nil {
+		log.Printf("[TCP] Errore creazione storage per device '%s': %v", deviceID, err)
+		return
+	}
 
 	cmdBuf := make([]byte, 1)
 	if _, err := io.ReadFull(conn, cmdBuf); err != nil {
@@ -64,12 +74,35 @@ func handleTCPConnection(conn net.Conn, db *sql.DB, storagePath string) {
 
 	switch cmdBuf[0] {
 	case 1:
-		handleUpload(conn, db, storagePath)
+		handleUpload(conn, db, deviceStorage, deviceID)
 	case 2:
-		handleDownload(conn, db, storagePath)
+		handleDownload(conn, db, deviceStorage, deviceID)
+	case 3:
+		handleDelete(conn, db, deviceStorage, deviceID)
 	default:
 		log.Printf("[TCP] ⚠️ Comando sconosciuto: %d", cmdBuf[0])
 	}
+}
+
+// getDeviceID estrae il CN dal certificato TLS client per identificare il dispositivo
+func getDeviceID(conn net.Conn) string {
+	tlsConn, ok := conn.(*tls.Conn)
+	if !ok {
+		return "default"
+	}
+	state := tlsConn.ConnectionState()
+	if len(state.PeerCertificates) == 0 {
+		return "default"
+	}
+	cn := state.PeerCertificates[0].Subject.CommonName
+	if cn == "" {
+		return "default"
+	}
+	// Sanitizza: rimuovi caratteri non sicuri per i path
+	cn = strings.ReplaceAll(cn, "/", "_")
+	cn = strings.ReplaceAll(cn, "..", "_")
+	cn = strings.ReplaceAll(cn, " ", "_")
+	return cn
 }
 
 // ============================================================
@@ -136,7 +169,7 @@ func handleStream(stream quic.Stream, db *sql.DB, storagePath string) {
 // ============================================================
 
 // handleUpload: riceve un file da Android, lo salva sul disco e aggiorna il DB
-func handleUpload(rw io.ReadWriter, db *sql.DB, storagePath string) {
+func handleUpload(rw io.ReadWriter, db *sql.DB, storagePath, deviceID string) {
 	log.Println("[Upload] Ricezione file in corso...")
 
 	// 1. Legge lunghezza percorso relativo (2 bytes big-endian)
@@ -187,7 +220,7 @@ func handleUpload(rw io.ReadWriter, db *sql.DB, storagePath string) {
 	log.Printf("✅ [Upload] File salvato: %s (%d bytes, sha256: %s...)", fullPath, writtenBytes, checksum[:8])
 
 	// 6. Aggiorna il database — cerca UUID esistente per evitare duplicati
-	existingFile, dbErr := GetFileByRelPath(db, relPath)
+	existingFile, dbErr := GetFileByRelPath(db, deviceID, relPath)
 	var fileUUID string
 	if dbErr == nil {
 		fileUUID = existingFile.UUID
@@ -198,6 +231,7 @@ func handleUpload(rw io.ReadWriter, db *sql.DB, storagePath string) {
 	f := &FileData{
 		UUID:         fileUUID,
 		Filename:     filepath.Base(relPath),
+		DeviceID:     deviceID,
 		RelPath:      relPath,
 		Size:         writtenBytes,
 		Status:       "FULL",
@@ -213,7 +247,7 @@ func handleUpload(rw io.ReadWriter, db *sql.DB, storagePath string) {
 }
 
 // handleDownload: invia un file fisico al client Android (Hydration)
-func handleDownload(rw io.ReadWriter, db *sql.DB, storagePath string) {
+func handleDownload(rw io.ReadWriter, db *sql.DB, storagePath, deviceID string) {
 	log.Println("[Download] Richiesta file in corso...")
 
 	// 1. Legge quale file vuole Android
@@ -252,6 +286,40 @@ func handleDownload(rw io.ReadWriter, db *sql.DB, storagePath string) {
 	}
 
 	log.Printf("✅ [Download] File inviato ad Android: %s (%d bytes)", fullPath, bytesSent)
+}
+
+// handleDelete: elimina un file fisico dal Raspberry e lo rimuove dal DB
+func handleDelete(rw io.ReadWriter, db *sql.DB, storagePath, deviceID string) {
+	pathLenBuf := make([]byte, 2)
+	if _, err := io.ReadFull(rw, pathLenBuf); err != nil {
+		return
+	}
+	pathLen := int(pathLenBuf[0])<<8 | int(pathLenBuf[1])
+	if pathLen == 0 || pathLen > 4096 {
+		rw.Write([]byte{0x00})
+		return
+	}
+
+	relPathBuf := make([]byte, pathLen)
+	if _, err := io.ReadFull(rw, relPathBuf); err != nil {
+		rw.Write([]byte{0x00})
+		return
+	}
+	relPath := string(relPathBuf)
+	fullPath := filepath.Join(storagePath, relPath)
+
+	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+		log.Printf("[Delete] ❌ Errore eliminazione '%s': %v", fullPath, err)
+		rw.Write([]byte{0x00})
+		return
+	}
+
+	if err := DeleteFileByRelPath(db, deviceID, relPath); err != nil {
+		log.Printf("[Delete] ⚠️ Errore rimozione dal DB '%s': %v", relPath, err)
+	}
+
+	log.Printf("🗑️  [Delete] File eliminato: %s", fullPath)
+	rw.Write([]byte{0x01}) // OK
 }
 
 // ============================================================

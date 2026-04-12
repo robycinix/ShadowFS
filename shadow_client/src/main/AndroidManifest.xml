@@ -4,6 +4,8 @@
 
     <!-- Permessi Generici di Rete (QUIC mTLS) -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
@@ -20,6 +22,8 @@
 
     <application
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:label="ShadowFS"
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
@@ -30,9 +34,21 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.action.LAUNCHER" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Lista file ghostati -->
+        <activity
+            android:name=".GhostListActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"/>
+
+        <!-- Scanner QR per pairing -->
+        <activity
+            android:name=".QrScanActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"/>
 
         <!-- Servizio Persistente -->
         <service

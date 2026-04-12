@@ -25,10 +25,10 @@ com.shadowfs.client-lifecycle-viewmodel-2.6.1-23 C:\Users\rober\.gradle\caches\t
 com.shadowfs.client-lifecycle-livedata-2.6.1-24 C:\Users\rober\.gradle\caches\transforms-3\df3293b2cc42ae381b44541bb8334d50\transformed\lifecycle-livedata-2.6.1\res
 com.shadowfs.client-drawerlayout-1.1.1-25 C:\Users\rober\.gradle\caches\transforms-3\e88c6367de0b4f4f7b06e28979ff40c3\transformed\drawerlayout-1.1.1\res
 com.shadowfs.client-jetified-startup-runtime-1.1.1-26 C:\Users\rober\.gradle\caches\transforms-3\f6a6417d3e66189b4952a33dfb5a8ef6\transformed\jetified-startup-runtime-1.1.1\res
-com.shadowfs.client-pngs-27 C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\build\generated\res\pngs\debug
-com.shadowfs.client-resValues-28 C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\build\generated\res\resValues\debug
-com.shadowfs.client-packageDebugResources-29 C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\build\intermediates\incremental\debug\packageDebugResources\merged.dir
-com.shadowfs.client-packageDebugResources-30 C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
-com.shadowfs.client-merged_res-31 C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\build\intermediates\merged_res\debug
-com.shadowfs.client-debug-32 C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\debug\res
-com.shadowfs.client-main-33 C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\res
+com.shadowfs.client-pngs-27 C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\build\generated\res\pngs\debug
+com.shadowfs.client-resValues-28 C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\build\generated\res\resValues\debug
+com.shadowfs.client-packageDebugResources-29 C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\build\intermediates\incremental\debug\packageDebugResources\merged.dir
+com.shadowfs.client-packageDebugResources-30 C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
+com.shadowfs.client-merged_res-31 C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\build\intermediates\merged_res\debug
+com.shadowfs.client-debug-32 C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\debug\res
+com.shadowfs.client-main-33 C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\res

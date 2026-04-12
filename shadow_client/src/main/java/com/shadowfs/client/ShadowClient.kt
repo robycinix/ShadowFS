@@ -36,6 +36,7 @@ object ShadowClient {
     // CMD bytes
     private const val CMD_UPLOAD: Byte = 0x01
     private const val CMD_DOWNLOAD: Byte = 0x02
+    private const val CMD_DELETE: Byte = 0x03
 
     // ----------------------------------------------------------------
     // Configurazione
@@ -164,6 +165,56 @@ object ShadowClient {
                 onResult(false)
             }
         }, "ShadowDownload-$relPath").start()
+    }
+
+    // ----------------------------------------------------------------
+    // Delete: elimina il file dal Raspberry Pi e dal telefono
+    // ----------------------------------------------------------------
+
+    /**
+     * Elimina [relPath] dal Raspberry Pi (file fisico + DB).
+     * Poi elimina dal telefono: il file ghost e il marker .shadow.
+     * Il callback viene eseguito in un thread di background.
+     */
+    fun delete(context: Context, relPath: String, localFile: File, onResult: (Boolean) -> Unit) {
+        Thread {
+            try {
+                val ip = getServerIp(context)
+                val port = getServerPort(context)
+                if (ip.isEmpty()) { onResult(false); return@Thread }
+
+                Log.i(TAG, "Delete → $ip:$port | $relPath")
+
+                var serverOk = false
+                createSSLSocket(ip, port).use { ssl ->
+                    val out = ssl.outputStream
+                    val pathBytes = relPath.toByteArray(Charsets.UTF_8)
+
+                    out.write(CMD_DELETE.toInt())
+                    out.write((pathBytes.size shr 8) and 0xFF)
+                    out.write(pathBytes.size and 0xFF)
+                    out.write(pathBytes)
+                    out.flush()
+
+                    serverOk = ssl.inputStream.read() == 1
+                }
+
+                if (serverOk) {
+                    // Elimina file ghost + marker .shadow dal telefono
+                    localFile.delete()
+                    File(localFile.parent, localFile.name + ".shadow").delete()
+                    File(localFile.parent, localFile.name + ".reghost").delete()
+                    Log.i(TAG, "✅ Delete completato: $relPath")
+                    onResult(true)
+                } else {
+                    Log.e(TAG, "❌ Delete rifiutato dal server: $relPath")
+                    onResult(false)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Delete fallito per '$relPath': ${e.message}", e)
+                onResult(false)
+            }
+        }.start()
     }
 
     // ----------------------------------------------------------------

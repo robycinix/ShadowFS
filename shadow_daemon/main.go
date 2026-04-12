@@ -11,6 +11,7 @@ import (
 
 func main() {
 	generateCerts := flag.Bool("generate-certs", false, "Genera i certificati mTLS invece di avviare il server")
+	addDevice := flag.String("add-device", "", "Genera certificati per un nuovo dispositivo (es: --add-device=telefono_mario)")
 	storagePath := flag.String("storage", "./shadow_root", "Percorso directory storage per i file offloaded")
 	dbPath := flag.String("db", "shadowfs.db", "Percorso database SQLite")
 	quicAddr := flag.String("addr", "0.0.0.0:4242", "Indirizzo UDP per QUIC (futuro)")
@@ -19,6 +20,23 @@ func main() {
 	_ = quicAddr // QUIC disponibile ma TCP è la via principale per Android
 
 	flag.Parse()
+
+	// 0. Aggiunge un nuovo dispositivo se richiesto
+	if *addDevice != "" {
+		deviceID := *addDevice
+		fmt.Printf("📱 Generazione certificati per dispositivo: '%s'...\n", deviceID)
+		if err := GenerateDeviceCertificate("certs", deviceID); err != nil {
+			log.Fatalf("❌ Errore: %v", err)
+		}
+		outDir := fmt.Sprintf("certs_for_android_%s", deviceID)
+		fmt.Printf("✅ Certificati generati in '%s/'\n", outDir)
+		fmt.Printf("   Trasferiscili sul telefono '%s' con:\n", deviceID)
+		fmt.Printf("     adb push %s/ca.crt     /sdcard/Download/shadowfs_certs/ca.crt\n", outDir)
+		fmt.Printf("     adb push %s/client.crt /sdcard/Download/shadowfs_certs/client.crt\n", outDir)
+		fmt.Printf("     adb push %s/client.key /sdcard/Download/shadowfs_certs/client.key\n", outDir)
+		fmt.Printf("\n   Il Raspberry salverà i file di '%s' in: shadow_root/%s/\n", deviceID, deviceID)
+		os.Exit(0)
+	}
 
 	// 1. Genera i certificati se richiesto
 	if *generateCerts {

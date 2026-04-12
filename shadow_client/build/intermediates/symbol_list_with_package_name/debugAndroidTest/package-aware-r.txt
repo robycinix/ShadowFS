@@ -1,3 +1,0 @@
-com.shadowfs.client.test
-style WhiteBackgroundDialogTheme
-style WhiteBackgroundTheme

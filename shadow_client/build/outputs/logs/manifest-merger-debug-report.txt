@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:2:1-46:12
-INJECTED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:2:1-46:12
-INJECTED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:2:1-46:12
-INJECTED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:2:1-46:12
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:2:1-54:12
+INJECTED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:2:1-54:12
+INJECTED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:2:1-54:12
+INJECTED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:2:1-54:12
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\rober\.gradle\caches\transforms-3\baa96130f1eb44c25858aee4f2df826a\transformed\material-1.11.0\AndroidManifest.xml:17:1-24:12
 MERGED from [androidx.constraintlayout:constraintlayout:2.1.4] C:\Users\rober\.gradle\caches\transforms-3\5d41c52ae4d728f5f3f05e666c9f4d9a\transformed\constraintlayout-2.1.4\AndroidManifest.xml:2:1-11:12
 MERGED from [androidx.appcompat:appcompat-resources:1.6.1] C:\Users\rober\.gradle\caches\transforms-3\b21328c7bcace3cdaf9ecd6cb4c200ca\transformed\jetified-appcompat-resources-1.6.1\AndroidManifest.xml:17:1-22:12
@@ -46,56 +46,56 @@ MERGED from [androidx.documentfile:documentfile:1.0.0] C:\Users\rober\.gradle\ca
 MERGED from [androidx.localbroadcastmanager:localbroadcastmanager:1.0.0] C:\Users\rober\.gradle\caches\transforms-3\53e0a383c73ee722ded34c8bd1a61737\transformed\localbroadcastmanager-1.0.0\AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.print:print:1.0.0] C:\Users\rober\.gradle\caches\transforms-3\81ff740fbe842f60131ad63c0facdab7\transformed\print-1.0.0\AndroidManifest.xml:17:1-22:12
 	package
-		INJECTED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml
+		INJECTED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml
 	android:versionName
-		INJECTED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml
+		INJECTED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml
 	xmlns:tools
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:3:5-51
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:3:5-51
 	android:versionCode
-		INJECTED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml
+		INJECTED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml
 	xmlns:android
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:2:11-69
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:2:11-69
 uses-permission#android.permission.INTERNET
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:6:5-67
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:6:5-67
 	android:name
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:6:22-64
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:6:22-64
 uses-permission#android.permission.ACCESS_NETWORK_STATE
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:7:5-79
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:7:5-79
 	android:name
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:7:22-76
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:7:22-76
 uses-permission#android.permission.ACCESS_WIFI_STATE
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:8:5-76
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:8:5-76
 	android:name
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:8:22-73
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:8:22-73
 uses-permission#android.permission.FOREGROUND_SERVICE
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:11:5-77
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:11:5-77
 	android:name
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:11:22-74
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:11:22-74
 uses-permission#android.permission.FOREGROUND_SERVICE_DATA_SYNC
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:12:5-87
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:12:5-87
 	android:name
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:12:22-84
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:12:22-84
 uses-permission#android.permission.POST_NOTIFICATIONS
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:13:5-77
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:13:5-77
 	android:name
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:13:22-74
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:13:22-74
 uses-permission#android.permission.MANAGE_EXTERNAL_STORAGE
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:16:5-17:53
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:16:5-17:53
 	tools:ignore
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:17:22-50
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:17:22-50
 	android:name
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:16:22-79
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:16:22-79
 uses-permission#android.permission.READ_EXTERNAL_STORAGE
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:18:5-80
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:18:5-80
 	android:name
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:18:22-77
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:18:22-77
 uses-permission#android.permission.WRITE_EXTERNAL_STORAGE
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:19:5-81
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:19:5-81
 	android:name
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:19:22-78
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:19:22-78
 application
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:21:5-45:19
-INJECTED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:21:5-45:19
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:21:5-53:19
+INJECTED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:21:5-53:19
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\rober\.gradle\caches\transforms-3\baa96130f1eb44c25858aee4f2df826a\transformed\material-1.11.0\AndroidManifest.xml:22:5-20
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\rober\.gradle\caches\transforms-3\baa96130f1eb44c25858aee4f2df826a\transformed\material-1.11.0\AndroidManifest.xml:22:5-20
 MERGED from [androidx.constraintlayout:constraintlayout:2.1.4] C:\Users\rober\.gradle\caches\transforms-3\5d41c52ae4d728f5f3f05e666c9f4d9a\transformed\constraintlayout-2.1.4\AndroidManifest.xml:9:5-20
@@ -113,47 +113,59 @@ MERGED from [androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\rober\.g
 MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\rober\.gradle\caches\transforms-3\f6a6417d3e66189b4952a33dfb5a8ef6\transformed\jetified-startup-runtime-1.1.1\AndroidManifest.xml:25:5-31:19
 MERGED from [androidx.startup:startup-runtime:1.1.1] C:\Users\rober\.gradle\caches\transforms-3\f6a6417d3e66189b4952a33dfb5a8ef6\transformed\jetified-startup-runtime-1.1.1\AndroidManifest.xml:25:5-31:19
 	android:extractNativeLibs
-		INJECTED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml
+		INJECTED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml
 	android:appComponentFactory
 		ADDED from [androidx.core:core:1.12.0] C:\Users\rober\.gradle\caches\transforms-3\c76c402bd0685d814c6f2a53b6d4b83d\transformed\core-1.12.0\AndroidManifest.xml:28:18-86
 	android:supportsRtl
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:24:9-35
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:26:9-35
 	android:label
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:23:9-33
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:25:9-33
+	android:roundIcon
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:24:9-48
+	android:icon
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:23:9-43
 	android:allowBackup
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:22:9-36
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:22:9-36
 	android:theme
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:25:9-67
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:27:9-67
 activity#com.shadowfs.client.MainActivity
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:28:9-35:20
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:30:9-37:20
 	android:exported
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:30:13-36
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:32:13-36
 	android:name
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:29:13-41
-intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.action.LAUNCHER
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:31:13-34:29
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:31:13-41
+intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:33:13-36:29
 action#android.intent.action.MAIN
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:32:17-69
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:34:17-69
 	android:name
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:32:25-66
-category#android.intent.action.LAUNCHER
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:33:17-75
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:34:25-66
+category#android.intent.category.LAUNCHER
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:35:17-77
 	android:name
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:33:27-72
-service#com.shadowfs.client.ShadowForegroundService
-ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:38:9-43:19
-	android:enabled
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:40:13-35
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:35:27-74
+activity#com.shadowfs.client.GhostListActivity
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:40:9-43:57
+	android:parentActivityName
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:43:13-55
 	android:exported
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:41:13-37
-	android:foregroundServiceType
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:42:13-53
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:42:13-37
 	android:name
-		ADDED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml:39:13-52
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:41:13-46
+service#com.shadowfs.client.ShadowForegroundService
+ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:46:9-51:19
+	android:enabled
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:48:13-35
+	android:exported
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:49:13-37
+	android:foregroundServiceType
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:50:13-53
+	android:name
+		ADDED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml:47:13-52
 uses-sdk
-INJECTED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml reason: use-sdk injection requested
-INJECTED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml
-INJECTED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml
+INJECTED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml
+INJECTED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\rober\.gradle\caches\transforms-3\baa96130f1eb44c25858aee4f2df826a\transformed\material-1.11.0\AndroidManifest.xml:20:5-44
 MERGED from [com.google.android.material:material:1.11.0] C:\Users\rober\.gradle\caches\transforms-3\baa96130f1eb44c25858aee4f2df826a\transformed\material-1.11.0\AndroidManifest.xml:20:5-44
 MERGED from [androidx.constraintlayout:constraintlayout:2.1.4] C:\Users\rober\.gradle\caches\transforms-3\5d41c52ae4d728f5f3f05e666c9f4d9a\transformed\constraintlayout-2.1.4\AndroidManifest.xml:5:5-7:41
@@ -237,9 +249,9 @@ MERGED from [androidx.localbroadcastmanager:localbroadcastmanager:1.0.0] C:\User
 MERGED from [androidx.print:print:1.0.0] C:\Users\rober\.gradle\caches\transforms-3\81ff740fbe842f60131ad63c0facdab7\transformed\print-1.0.0\AndroidManifest.xml:20:5-44
 MERGED from [androidx.print:print:1.0.0] C:\Users\rober\.gradle\caches\transforms-3\81ff740fbe842f60131ad63c0facdab7\transformed\print-1.0.0\AndroidManifest.xml:20:5-44
 	android:targetSdkVersion
-		INJECTED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml
+		INJECTED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml
 	android:minSdkVersion
-		INJECTED from C:\Users\rober\Desktop\Progetti_final\ShadowFS\shadow_client\src\main\AndroidManifest.xml
+		INJECTED from C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\src\main\AndroidManifest.xml
 provider#androidx.startup.InitializationProvider
 ADDED from [androidx.emoji2:emoji2:1.2.0] C:\Users\rober\.gradle\caches\transforms-3\299f47dd7910becf2d99380127c2994c\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:24:9-32:20
 MERGED from [androidx.lifecycle:lifecycle-process:2.6.1] C:\Users\rober\.gradle\caches\transforms-3\38e24fba1362665f1c3d280c4c2bab0b\transformed\jetified-lifecycle-process-2.6.1\AndroidManifest.xml:24:9-32:20

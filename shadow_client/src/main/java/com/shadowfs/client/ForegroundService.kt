@@ -89,12 +89,16 @@ class ShadowForegroundService : Service() {
                     // Calcola il percorso relativo rispetto alla root monitorata
                     val relPath = file.absolutePath.removePrefix(MONITORED_DIR).trimStart('/')
 
+                    // Sopprime l'idratazione durante il ghosting (evita loop upload→ghost→hydrate)
+                    hydrationManager.suppressHydration(file.absolutePath)
+
                     // Invia il file al Raspberry Pi via TLS mTLS REALE
                     ShadowClient.upload(this, file, relPath) { success ->
                         if (success) {
                             vfsManager.markAsGhost(file)
                         } else {
                             android.util.Log.w("ShadowFS", "Upload fallito per $relPath — file non ghostato")
+                            notifyRaspberryUnreachable()
                         }
                     }
                 }
@@ -122,6 +126,7 @@ class ShadowForegroundService : Service() {
                                 val relPath = originalFile.absolutePath
                                     .removePrefix(MONITORED_DIR).trimStart('/')
 
+                                hydrationManager.suppressHydration(originalFile.absolutePath)
                                 ShadowClient.upload(this, originalFile, relPath) { success ->
                                     if (success) {
                                         vfsManager.markAsGhost(originalFile)
@@ -140,6 +145,25 @@ class ShadowForegroundService : Service() {
                     android.util.Log.e("ShadowFS", "Errore re-ghosting: ${e.message}")
                 }
             }
+    }
+
+    private var lastUnreachableNotifTime = 0L
+
+    private fun notifyRaspberryUnreachable() {
+        val now = System.currentTimeMillis()
+        if (now - lastUnreachableNotifTime < 10 * 60 * 1000L) return // max 1 notifica ogni 10 min
+        lastUnreachableNotifTime = now
+
+        val notif = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setContentTitle("ShadowFS — Raspberry irraggiungibile")
+            .setContentText("Impossibile ghostare i file. Controlla che il Raspberry sia acceso e connesso.")
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+
+        getSystemService(android.app.NotificationManager::class.java)
+            .notify(99, notif)
     }
 
     private fun createNotificationChannel() {
