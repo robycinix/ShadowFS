@@ -137,7 +137,7 @@ Wants=network-online.target
 Type=simple
 User=root
 WorkingDirectory=$PROJECT_DIR
-ExecStart=$PROJECT_DIR/shadowdaemon -storage $STORAGE_DIR -tcp-addr 0.0.0.0:4243
+ExecStart=$PROJECT_DIR/shadowdaemon -storage $STORAGE_DIR -tcp-addr 0.0.0.0:4243 -pairing-addr 0.0.0.0:4244
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -171,14 +171,20 @@ systemctl enable avahi-daemon
 systemctl restart avahi-daemon
 echo "   mDNS attivo — il telefono Android può trovare questo Raspberry automaticamente."
 
-# 8. Firewall — apri porta TCP 4243
-echo "   Apertura porta TCP 4243 sul firewall..."
+# 8. Firewall — apri porta TCP 4243 e HTTP 4244
+echo "   Apertura porte sul firewall (4243 mTLS, 4244 pairing)..."
 if command -v ufw &> /dev/null; then
     ufw allow 4243/tcp 2>/dev/null || true
+    ufw allow 4244/tcp 2>/dev/null || true
 elif command -v firewall-cmd &> /dev/null; then
     firewall-cmd --zone=public --add-port=4243/tcp --permanent 2>/dev/null || true
+    firewall-cmd --zone=public --add-port=4244/tcp --permanent 2>/dev/null || true
     firewall-cmd --reload 2>/dev/null || true
 fi
+
+# 8b. Installa qrencode per visualizzare il QR nel terminale
+echo "   Installazione qrencode..."
+apt-get install -y -q qrencode 2>/dev/null || true
 
 # 8. Report finale
 echo ""
@@ -189,6 +195,7 @@ echo -e "  Servizio:   systemctl status shadowfs"
 echo -e "  Log:        journalctl -fu shadowfs"
 echo -e "  Storage:    $STORAGE_DIR"
 echo -e "  Porta TCP:  4243 (mTLS)"
+echo -e "  Porta HTTP: 4244 (Pairing QR)"
 echo ""
 echo -e "${YELLOW}  ── CERTIFICATI PER ANDROID ─────────────────────────────${NC}"
 echo -e "  I 3 file per l'app si trovano in: $CERTS_CLIENT_DIR"

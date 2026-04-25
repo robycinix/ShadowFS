@@ -15,10 +15,22 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class ShadowForegroundService : Service() {
 
+    companion object {
+        /** Flag aggiornato in onCreate/onDestroy — usato da MainActivity per sapere se il servizio è attivo.
+         *  getRunningServices() è deprecated e inutilizzabile su Android 8+. */
+        @Volatile
+        var isRunning: Boolean = false
+    }
+
     private val CHANNEL_ID = "ShadowFS_Channel"
     private val CHANNEL_TRANSFER_ID = "ShadowFS_Transfer"
     private val NOTIF_TRANSFER_ID = 50
-    private val MONITORED_DIR = "/storage/emulated/0"
+
+    // Cartella radice monitorata. Letta dalle SharedPreferences così che in futuro
+    // possa essere configurata dall'utente senza toccare il codice.
+    private val monitoredDir: String
+        get() = getSharedPreferences(ShadowClient.PREFS_NAME, MODE_PRIVATE)
+            .getString("monitored_dir", "/storage/emulated/0") ?: "/storage/emulated/0"
 
     private lateinit var vfsManager: VfsManager
     private lateinit var hydrationManager: HydrationManager
@@ -58,11 +70,8 @@ class ShadowForegroundService : Service() {
 
     // --- REGOLE INTELLIGENTI DI GHOSTING ---
 
-    // Cartelle da non toccare mai (Pinned)
-    private val PINNED_FOLDERS = listOf(
-        "/storage/emulated/0/Download/shadowfs_certs", // Mai ghostare i certificati!
-        "/storage/emulated/0/Android"                 // Cartella di sistema visibile
-    )
+    // Cartelle da non toccare mai — lette dinamicamente da SharedPreferences
+    private fun pinnedFolders(): Set<String> = ShadowClient.getPinnedFolders(this)
 
     // Whitelist: ghostiamo SOLO questi tipi di file (media e documenti grandi)
     private val ALLOWED_EXTENSIONS = listOf(".jpg", ".jpeg", ".png", ".mp4", ".mov", ".mkv", ".pdf", ".zip")
@@ -75,12 +84,19 @@ class ShadowForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
+
+        // Reset preventivo: se il processo è sopravvissuto a un onDestroy anomalo
+        // (es. kill dal sistema senza passare per onDestroy) l'executor potrebbe
+        // essere in uno stato inconsistente. Ricrearlo garantisce un avvio pulito.
+        ShadowClient.shutdownAndReset()
+
         createNotificationChannel()
         createTransferNotificationChannel()
         startForeground(1, createNotification())
 
         vfsManager = VfsManager()
-        hydrationManager = HydrationManager(this, MONITORED_DIR)
+        hydrationManager = HydrationManager(this, monitoredDir)
         hydrationManager.start()
 
         // Controlla la memoria ogni ora
@@ -99,7 +115,7 @@ class ShadowForegroundService : Service() {
     }
 
     private fun checkSpaceAndOffload(force: Boolean = false) {
-        val root = File(MONITORED_DIR)
+        val root = File(monitoredDir)
         val usableSpace = root.usableSpace
         val totalSpace = root.totalSpace
         if (totalSpace == 0L) return
@@ -110,7 +126,7 @@ class ShadowForegroundService : Service() {
         if (retryQueue.isNotEmpty()) {
             android.util.Log.i("ShadowFS", "Retry queue: ${retryQueue.size} file da riprovare")
             retryQueue.forEach { relPath ->
-                val file = File("$MONITORED_DIR/$relPath")
+                val file = File("$monitoredDir/$relPath")
                 if (!file.exists() || file.length() == 0L) {
                     removeFromRetryQueue(relPath) // già ghostato o eliminato
                     return@forEach
@@ -126,7 +142,7 @@ class ShadowForegroundService : Service() {
 
             root.walkTopDown()
                 .onEnter { dir ->
-                    PINNED_FOLDERS.none { pinned -> dir.absolutePath.startsWith(pinned) }
+                    pinnedFolders().none { pinned -> dir.absolutePath.startsWith(pinned) }
                 }
                 .filter { file -> file.isFile }
                 .filter { file ->
@@ -137,7 +153,7 @@ class ShadowForegroundService : Service() {
                     (force || file.lastModified() < thresholdTime)
                 }
                 .forEach { file ->
-                    val relPath = file.absolutePath.removePrefix(MONITORED_DIR).trimStart('/')
+                    val relPath = file.absolutePath.removePrefix(monitoredDir).trimStart('/')
                     hydrationManager.suppressHydration(file.absolutePath)
                     uploadFile(file, relPath, isRetry = false)
                 }
@@ -148,7 +164,7 @@ class ShadowForegroundService : Service() {
         val oneHourMillis = 60L * 60 * 1000
 
         root.walkTopDown()
-            .onEnter { dir -> PINNED_FOLDERS.none { p -> dir.absolutePath.startsWith(p) } }
+            .onEnter { dir -> pinnedFolders().none { p -> dir.absolutePath.startsWith(p) } }
             .filter { file -> file.isFile && file.name.endsWith(".reghost") }
             .forEach { markerFile ->
                 try {
@@ -163,7 +179,7 @@ class ShadowForegroundService : Service() {
 
                             if (!recentlyModified) {
                                 val relPath = originalFile.absolutePath
-                                    .removePrefix(MONITORED_DIR).trimStart('/')
+                                    .removePrefix(monitoredDir).trimStart('/')
 
                                 hydrationManager.suppressHydration(originalFile.absolutePath)
                                 uploadFile(originalFile, relPath, isRetry = false) { success ->
@@ -208,7 +224,7 @@ class ShadowForegroundService : Service() {
             if (activeUploads.get() == 0) dismissTransferNotification()
 
             if (success) {
-                vfsManager.markAsGhost(file)
+                vfsManager.markAsGhost(this, file)
                 removeFromRetryQueue(relPath)
                 if (isRetry) android.util.Log.i("ShadowFS", "✅ Retry riuscito: $relPath")
             } else {
@@ -297,7 +313,12 @@ class ShadowForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isRunning = false
         scanTimer.cancel()
         hydrationManager.stop()
+        // Interrompe il worker thread di rete e ne crea uno nuovo pronto per il prossimo avvio.
+        // Senza questo, un task in corso al momento del destroy potrebbe tenere l'executor
+        // bloccato, impedendo qualsiasi operazione di rete al restart del service.
+        ShadowClient.shutdownAndReset()
     }
 }

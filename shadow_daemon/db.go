@@ -21,7 +21,9 @@ type FileData struct {
 
 // InitDB inizializza il database SQLite e crea la tabella se non esiste
 func InitDB(dbPath string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", dbPath)
+	// WAL mode: letture concorrenti senza bloccare le scritture.
+	// busy_timeout: ritenta automaticamente per 5s invece di restituire SQLITE_BUSY.
+	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_busy_timeout=5000&_synchronous=NORMAL")
 	if err != nil {
 		return nil, err
 	}
@@ -52,15 +54,16 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	return db, nil
 }
 
-// UpdateOrInsertFile inserisce o aggiorna un file nel database
+// UpdateOrInsertFile inserisce o aggiorna un file nel database.
+// Il conflitto è risolto su (device_id, rel_path) — la chiave logica del file —
+// così funziona anche se l'UUID cambia (es. dopo reinstallazione dell'app).
 func UpdateOrInsertFile(db *sql.DB, f *FileData) error {
 	query := `
 	INSERT INTO files (uuid, filename, device_id, rel_path, size, status, checksum, last_modified, last_access)
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	ON CONFLICT(uuid) DO UPDATE SET
+	ON CONFLICT(device_id, rel_path) DO UPDATE SET
+		uuid=excluded.uuid,
 		filename=excluded.filename,
-		device_id=excluded.device_id,
-		rel_path=excluded.rel_path,
 		size=excluded.size,
 		status=excluded.status,
 		checksum=excluded.checksum,

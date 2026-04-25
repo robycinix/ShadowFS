@@ -1,0 +1,37 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.iml
+
+# Local environment
+local.properties
+*.local
+.env
+.env.*
+
+# Android / Gradle
+**/.gradle/
+**/build/
+**/captures/
+**/.externalNativeBuild/
+**/.cxx/
+*.apk
+*.aab
+*.ap_
+
+# Kotlin / Java
+*.class
+
+# Go
+shadow_daemon/shadowdaemon
+shadow_daemon/shadowfs.db
+shadow_daemon/shadowfs.db-*
+shadow_daemon/shadow_root/
+shadow_daemon/certs/
+shadow_daemon/certs_for_android*/
+
+# Generated / runtime data
+*.log
+*.tmp
+*.part

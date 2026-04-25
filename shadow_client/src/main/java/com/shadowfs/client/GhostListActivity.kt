@@ -1,11 +1,13 @@
 package com.shadowfs.client
 
 import android.app.AlertDialog
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Environment
 import android.view.View
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -60,16 +62,57 @@ class GhostListActivity : AppCompatActivity() {
         return true
     }
 
+    // Dati pre-calcolati per ogni file ghostato — lettura su background thread, UI su main thread
+    private data class GhostEntry(
+        val shadowFile: File,
+        val originalName: String,
+        val originalSize: Long,
+        val hasThumbnail: Boolean,
+        val localFile: File,
+        val relPath: String
+    )
+
+    /** Avvia la scansione in background per evitare ANR su storage pieno */
     private fun loadGhostFiles() {
         containerGhostList.removeAllViews()
+        tvGhostCount.text = "⏳ Caricamento..."
+        tvEmpty.visibility = View.GONE
+        containerGhostList.visibility = View.GONE
 
-        val root = File(Environment.getExternalStorageDirectory().absolutePath)
-        val shadowFiles = root.walkTopDown()
-            .filter { it.isFile && it.name.endsWith(".shadow") }
-            .sortedByDescending { it.lastModified() }
-            .toList()
+        Thread {
+            val root = File(Environment.getExternalStorageDirectory().absolutePath)
+            val entries = root.walkTopDown()
+                .filter { it.isFile && it.name.endsWith(".shadow") }
+                .sortedByDescending { it.lastModified() }
+                .map { shadowFile ->
+                    val originalName = shadowFile.name.removeSuffix(".shadow")
+                    val lines = try {
+                        shadowFile.readLines().associate {
+                            val parts = it.split("=", limit = 2)
+                            if (parts.size == 2) parts[0] to parts[1] else "" to ""
+                        }
+                    } catch (_: Exception) { emptyMap() }
+                    val originalSize = lines["originalSize"]?.toLongOrNull() ?: 0L
+                    val hasThumbnail = lines["hasThumbnail"] == "true"
+                    val localFile = File(shadowFile.parent, originalName)
+                    val relPath = localFile.absolutePath
+                        .removePrefix(root.absolutePath)
+                        .trimStart('/')
+                    GhostEntry(shadowFile, originalName, originalSize, hasThumbnail, localFile, relPath)
+                }
+                .toList()
 
-        if (shadowFiles.isEmpty()) {
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                buildGhostUI(entries)
+            }
+        }.start()
+    }
+
+    private fun buildGhostUI(entries: List<GhostEntry>) {
+        containerGhostList.removeAllViews()
+
+        if (entries.isEmpty()) {
             tvEmpty.visibility = View.VISIBLE
             containerGhostList.visibility = View.GONE
             tvRecoveredTotal.text = ""
@@ -79,24 +122,18 @@ class GhostListActivity : AppCompatActivity() {
 
         tvEmpty.visibility = View.GONE
         containerGhostList.visibility = View.VISIBLE
-        tvGhostCount.text = "${shadowFiles.size} file ghostati"
+        tvGhostCount.text = "${entries.size} file ghostati"
 
-        var totalRecovered = 0L
+        val totalRecovered = entries.sumOf { it.originalSize }
 
-        shadowFiles.forEach { shadowFile ->
-            val originalName = shadowFile.name.removeSuffix(".shadow")
-            val lines = shadowFile.readLines().associate {
-                val parts = it.split("=", limit = 2)
-                if (parts.size == 2) parts[0] to parts[1] else "" to ""
-            }
-            val originalSize = lines["originalSize"]?.toLongOrNull() ?: 0L
-            val hasThumbnail = lines["hasThumbnail"] == "true"
-            totalRecovered += originalSize
+        val thumbSizePx = (64 * resources.displayMetrics.density).toInt()
 
+        entries.forEach { entry ->
             val card = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(16, 16, 16, 16)
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(12, 12, 12, 12)
                 setBackgroundColor(Color.parseColor("#1A1A2E"))
+                gravity = android.view.Gravity.CENTER_VERTICAL
                 val lp = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
@@ -104,14 +141,45 @@ class GhostListActivity : AppCompatActivity() {
                 layoutParams = lp
             }
 
-            // Riga superiore: nome + pulsante elimina
+            // ── Thumbnail (colonna sinistra) ────────────────────────────────
+            // Il file fisico ghost esiste ancora su disco (IS_PENDING non lo elimina),
+            // quindi BitmapFactory può leggere il thumbnail JPEG direttamente.
+            val imgThumb = ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(thumbSizePx, thumbSizePx).also {
+                    it.setMargins(0, 0, 12, 0)
+                }
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setBackgroundColor(Color.parseColor("#0D0D1A"))
+            }
+            if (entry.hasThumbnail) {
+                Thread {
+                    val bmp = runCatching {
+                        BitmapFactory.decodeFile(entry.localFile.absolutePath)
+                    }.getOrNull()
+                    runOnUiThread {
+                        if (!isFinishing && !isDestroyed) {
+                            if (bmp != null) imgThumb.setImageBitmap(bmp)
+                            else imgThumb.setImageResource(android.R.drawable.ic_menu_gallery)
+                        }
+                    }
+                }.start()
+            } else {
+                imgThumb.setImageResource(android.R.drawable.ic_menu_gallery)
+            }
+
+            // ── Colonna destra (nome + pulsante + dettagli) ─────────────────
+            val colRight = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+
             val rowTop = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = android.view.Gravity.CENTER_VERTICAL
             }
 
             val tvName = TextView(this).apply {
-                text = "👻  $originalName"
+                text = entry.originalName
                 textSize = 14f
                 setTextColor(Color.parseColor("#C0C0E0"))
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -123,32 +191,23 @@ class GhostListActivity : AppCompatActivity() {
                 setBackgroundColor(Color.TRANSPARENT)
                 setTextColor(Color.parseColor("#FF6060"))
                 setPadding(8, 0, 8, 0)
-                val lp = LinearLayout.LayoutParams(
+                layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 )
-                layoutParams = lp
             }
-
-            val localFile = File(
-                shadowFile.parent,
-                shadowFile.name.removeSuffix(".shadow")
-            )
-            val relPath = localFile.absolutePath
-                .removePrefix(Environment.getExternalStorageDirectory().absolutePath)
-                .trimStart('/')
 
             btnDelete.setOnClickListener {
                 AlertDialog.Builder(this)
                     .setTitle("Elimina file")
-                    .setMessage("Elimini '$originalName' anche dal Raspberry Pi?\n\nL'operazione è irreversibile.")
+                    .setMessage("Elimini '${entry.originalName}' anche dal Raspberry Pi?\n\nL'operazione è irreversibile.")
                     .setPositiveButton("Elimina") { _, _ ->
                         btnDelete.isEnabled = false
-                        ShadowClient.delete(this, relPath, localFile) { success ->
+                        ShadowClient.delete(this, entry.relPath, entry.localFile) { success ->
                             runOnUiThread {
                                 if (success) {
-                                    Toast.makeText(this, "✅ '$originalName' eliminato", Toast.LENGTH_SHORT).show()
-                                    loadGhostFiles() // aggiorna la lista
+                                    Toast.makeText(this, "✅ '${entry.originalName}' eliminato", Toast.LENGTH_SHORT).show()
+                                    loadGhostFiles()
                                 } else {
                                     Toast.makeText(this, "❌ Errore durante l'eliminazione", Toast.LENGTH_LONG).show()
                                     btnDelete.isEnabled = true
@@ -163,78 +222,80 @@ class GhostListActivity : AppCompatActivity() {
             rowTop.addView(tvName)
             rowTop.addView(btnDelete)
 
-            // Dettagli
             val tvDetails = TextView(this).apply {
-                val thumbInfo = if (hasThumbnail) "anteprima disponibile" else "nessuna anteprima"
-                text = "Originale: ${formatSize(originalSize)}  •  $thumbInfo"
+                text = formatSize(entry.originalSize)
                 textSize = 12f
                 setTextColor(Color.parseColor("#606080"))
                 setPadding(0, 4, 0, 0)
             }
 
-            card.addView(rowTop)
-            card.addView(tvDetails)
+            colRight.addView(rowTop)
+            colRight.addView(tvDetails)
+            card.addView(imgThumb)
+            card.addView(colRight)
             containerGhostList.addView(card)
         }
 
         tvRecoveredTotal.text = "Recuperati: ${formatSize(totalRecovered)}"
     }
 
-    /** Confronta i file .shadow sul telefono con quelli sul Raspberry e mostra gli orfani */
+    /** Confronta i file .shadow sul telefono con quelli sul Raspberry e mostra gli orfani.
+     *  La scansione avviene in background per non bloccare il main thread. */
     private fun checkOrphans() {
         btnSync.isEnabled = false
         btnSync.text = "🔄 Controllo..."
         containerOrphans.removeAllViews()
         btnDeleteOrphans.visibility = View.GONE
 
-        // Raccoglie tutti i relPath dei file ghostati sul telefono
-        val root = File(Environment.getExternalStorageDirectory().absolutePath)
-        val phoneFiles = root.walkTopDown()
-            .filter { it.isFile && it.name.endsWith(".shadow") }
-            .map { shadowFile ->
-                shadowFile.absolutePath
-                    .removePrefix(root.absolutePath)
-                    .trimStart('/')
-                    .removeSuffix(".shadow")
-            }
-            .toList()
+        Thread {
+            val root = File(Environment.getExternalStorageDirectory().absolutePath)
+            val phoneFiles = root.walkTopDown()
+                .filter { it.isFile && it.name.endsWith(".shadow") }
+                .map { shadowFile ->
+                    shadowFile.absolutePath
+                        .removePrefix(root.absolutePath)
+                        .trimStart('/')
+                        .removeSuffix(".shadow")
+                }
+                .toList()
 
-        ShadowClient.syncIndex(this, phoneFiles) { orphans ->
-            runOnUiThread {
-                btnSync.isEnabled = true
-                btnSync.text = "🔍 Controlla"
-                currentOrphans = orphans
+            ShadowClient.syncIndex(this, phoneFiles) { orphans ->
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    btnSync.isEnabled = true
+                    btnSync.text = "🔍 Controlla"
+                    currentOrphans = orphans
 
-                if (orphans.isEmpty()) {
-                    val tv = TextView(this).apply {
-                        text = "✅ Nessun orfano — il Raspberry è in sync con il telefono."
-                        textSize = 13f
-                        setTextColor(Color.parseColor("#80D0A0"))
-                        setPadding(8, 8, 8, 8)
-                    }
-                    containerOrphans.addView(tv)
-                } else {
-                    val header = TextView(this).apply {
-                        text = "${orphans.size} file trovati sul Raspberry ma non sul telefono:"
-                        textSize = 12f
-                        setTextColor(Color.parseColor("#FF8080"))
-                        setPadding(8, 4, 8, 8)
-                    }
-                    containerOrphans.addView(header)
-
-                    orphans.forEach { relPath ->
+                    if (orphans.isEmpty()) {
                         val tv = TextView(this).apply {
-                            text = "🗑  ${relPath.substringAfterLast('/')}"
-                            textSize = 12f
-                            setTextColor(Color.parseColor("#C0A0A0"))
-                            setPadding(16, 4, 8, 4)
+                            text = "✅ Nessun orfano — il Raspberry è in sync con il telefono."
+                            textSize = 13f
+                            setTextColor(Color.parseColor("#80D0A0"))
+                            setPadding(8, 8, 8, 8)
                         }
                         containerOrphans.addView(tv)
+                    } else {
+                        val header = TextView(this).apply {
+                            text = "${orphans.size} file trovati sul Raspberry ma non sul telefono:"
+                            textSize = 12f
+                            setTextColor(Color.parseColor("#FF8080"))
+                            setPadding(8, 4, 8, 8)
+                        }
+                        containerOrphans.addView(header)
+                        orphans.forEach { relPath ->
+                            val tv = TextView(this).apply {
+                                text = "🗑  ${relPath.substringAfterLast('/')}"
+                                textSize = 12f
+                                setTextColor(Color.parseColor("#C0A0A0"))
+                                setPadding(16, 4, 8, 4)
+                            }
+                            containerOrphans.addView(tv)
+                        }
+                        btnDeleteOrphans.visibility = View.VISIBLE
                     }
-                    btnDeleteOrphans.visibility = View.VISIBLE
                 }
             }
-        }
+        }.start()
     }
 
     /** Elimina tutti gli orfani dal Raspberry uno per uno */
@@ -247,9 +308,13 @@ class GhostListActivity : AppCompatActivity() {
         fun deleteNext(index: Int) {
             if (index >= total) {
                 runOnUiThread {
-                    Toast.makeText(this, "✅ Eliminati $deleted/$total file dal Raspberry", Toast.LENGTH_LONG).show()
+                    val msg = if (failed == 0)
+                        "✅ Eliminati $deleted/$total file dal Raspberry"
+                    else
+                        "⚠️ Eliminati $deleted/$total — $failed falliti (Raspberry irraggiungibile?)"
+                    Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
                     btnDeleteOrphans.isEnabled = true
-                    checkOrphans() // aggiorna la lista
+                    checkOrphans()
                 }
                 return
             }

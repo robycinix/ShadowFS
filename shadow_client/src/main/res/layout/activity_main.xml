@@ -203,6 +203,15 @@
             android:text="⚠️ Richiedi Permesso Gestione File"
             android:backgroundTint="#3A2A1A"
             android:textColor="#FFB060"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btn_battery_opt"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🔋 Disattiva Ottimizzazione Batteria"
+            android:backgroundTint="#3A2A1A"
+            android:textColor="#FFB060"
             android:layout_marginBottom="16dp" />
 
         <!-- Divider -->
@@ -251,6 +260,16 @@
             android:text="👻 Vedi File Ghostati"
             android:backgroundTint="#1A1A3A"
             android:textColor="#8080FF"
+            android:layout_marginBottom="8dp"/>
+
+        <!-- Pulsante cartelle protette -->
+        <Button
+            android:id="@+id/btn_pinned_folders"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📌 Cartelle Protette (mai ghostate)"
+            android:backgroundTint="#1A2A1A"
+            android:textColor="#80C080"
             android:layout_marginBottom="16dp"/>
 
         <!-- Sommario spazio recuperato -->

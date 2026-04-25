@@ -46,10 +46,18 @@ Rete: LAN Wi-Fi (IP locale) oppure ovunque con Tailscale VPN
 
 | Comando | Byte | Descrizione |
 |---------|------|-------------|
-| Upload   | `0x01` | Android → Raspberry: invia il file |
-| Download | `0x02` | Android ← Raspberry: scarica il file |
+| Upload   | `0x01` | Android → Raspberry: invia path, dimensione, SHA-256 e contenuto |
+| Download | `0x02` | Android ← Raspberry: scarica dimensione, SHA-256 e contenuto |
 | Delete   | `0x03` | Elimina file dal Raspberry e dal DB |
 | SyncIndex| `0x04` | Confronta indici per trovare orfani |
+
+Upload usa file temporanei `.part`: il daemon pubblica il file finale solo dopo
+aver ricevuto tutti i byte attesi e verificato il checksum SHA-256. Gli upload
+interrotti restano riprendibili senza esporre file incompleti ai download.
+
+Download usa file temporanei `.shadowdl.tmp`: l'app sostituisce il ghost locale
+solo dopo aver scaricato tutti i byte attesi e verificato il checksum. Se la rete
+cade durante l'idratazione, il ghost resta intatto e il download può riprendere.
 
 ---
 
@@ -138,6 +146,9 @@ adb push /opt/shadowfs/certs_for_android/client.crt /sdcard/Download/shadowfs_ce
 adb push /opt/shadowfs/certs_for_android/client.key /sdcard/Download/shadowfs_certs/client.key
 ```
 
+Al primo avvio l'app copia questi file nello storage privato dell'app. La cartella
+`Download/shadowfs_certs/` resta supportata come punto di import manuale.
+
 ---
 
 ## Comandi utili — Raspberry Pi
@@ -187,7 +198,7 @@ adb shell pm grant com.shadowfs.client android.permission.POST_NOTIFICATIONS
 | `Connection refused` | Daemon non avviato | `systemctl start shadowfs` |
 | `PKIX path building failed` | IP non nel certificato SAN | Rigenera certificati con `--server-ip` corretto |
 | `bad certificate` | Client cert non corrisponde alla CA | Rigenera tutti i certificati |
-| `Certificati mancanti` (app) | File non nella cartella giusta | Verifica `Download/shadowfs_certs/` |
+| `Certificati mancanti` (app) | File non importati nello storage privato | Verifica `Download/shadowfs_certs/` e riapri l'app |
 | File non si tronca | Permesso `MANAGE_EXTERNAL_STORAGE` mancante | Impostazioni → App → ShadowFS → Permessi |
 | Idratazione indesiderata | Galleria in prefetching | Rate limiter attivo — normale |
 
@@ -195,9 +206,11 @@ adb shell pm grant com.shadowfs.client android.permission.POST_NOTIFICATIONS
 
 ## Roadmap futura
 
-- [ ] QUIC invece di TCP (migrazione WiFi→4G senza interruzioni)
+- [ ] QUIC invece di TCP (sperimentale/parcheggiato; TCP+mTLS è il path supportato)
 - [ ] Protobuf per il protocollo (versioning, robustezza)
-- [ ] Pinning cartelle dall'UI
+- [x] Pinning cartelle dall'UI ✅
+- [x] Battery optimization exemption (Doze mode) ✅
+- [x] Resume upload per file grandi (ripartenza automatica dal byte interrotto) ✅
 - [ ] Backup incrementale (solo diff)
 
 ---

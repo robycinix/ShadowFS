@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,7 +19,10 @@ import (
 func ScanFolder(db *sql.DB, rootPath string) error {
 	return filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return err
+			// Continua la scansione anche in caso di errori su singoli file/cartelle
+			// (es. permessi negati su sottocartelle di sistema).
+			log.Printf("⚠️ Errore accesso a %s: %v — scansione continua", path, err)
+			return nil
 		}
 		if info.IsDir() {
 			return nil
@@ -31,20 +35,28 @@ func ScanFolder(db *sql.DB, rootPath string) error {
 }
 
 func analyzeFile(db *sql.DB, rootPath, filePath string, info os.FileInfo) error {
-	relPath, err := filepath.Rel(rootPath, filePath)
+	fullRelPath, err := filepath.Rel(rootPath, filePath)
 	if err != nil {
 		return err
 	}
 
-	// FIX CRITICO: controlla se il file esiste già nel DB tramite rel_path.
+	// I file sono organizzati in shadow_root/<deviceID>/relPath.
+	// Estrai deviceID dal primo componente del percorso relativo.
+	// File direttamente in shadow_root (senza sottocartella device) vengono saltati.
+	parts := strings.SplitN(fullRelPath, string(filepath.Separator), 2)
+	if len(parts) < 2 {
+		return nil // file nella root di storage, non appartiene a nessun device
+	}
+	deviceID := parts[0]
+	relPath := parts[1]
+
+	// Controlla se il file esiste già nel DB tramite (deviceID, relPath).
 	// Se esiste, riusa il suo UUID — evita di creare record duplicati ad ogni scansione.
-	existingFile, dbErr := GetFileByRelPath(db, "default", relPath)
+	existingFile, dbErr := GetFileByRelPath(db, deviceID, relPath)
 	var fileUUID string
 	if dbErr == nil {
-		// File già noto: riusa l'UUID esistente
 		fileUUID = existingFile.UUID
 	} else {
-		// Nuovo file: genera un UUID fresco
 		fileUUID = uuid.New().String()
 	}
 
@@ -56,7 +68,7 @@ func analyzeFile(db *sql.DB, rootPath, filePath string, info os.FileInfo) error 
 	f := &FileData{
 		UUID:         fileUUID,
 		Filename:     info.Name(),
-		DeviceID:     "default",
+		DeviceID:     deviceID,
 		RelPath:      relPath,
 		Size:         info.Size(),
 		Status:       "FULL",

@@ -17,6 +17,8 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import org.json.JSONObject
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -102,37 +104,101 @@ class QrScanActivity : AppCompatActivity() {
 
         runOnUiThread { tvScanStatus.text = "🔄 QR rilevato — configurazione in corso..." }
 
-        try {
-            val json = JSONObject(raw)
-            val ip      = json.getString("ip")
-            val port    = json.getInt("port")
-            val caB64   = json.getString("ca")
-            val crtB64  = json.getString("crt")
-            val keyB64  = json.getString("key")
+        // Esegui il parsing in background (può richiedere una chiamata HTTP)
+        cameraExecutor.execute {
+            try {
+                val jsonStr = if (raw.startsWith("http://") || raw.startsWith("https://")) {
+                    // URL-based QR: valida che sia un IP locale/Tailscale prima di aprire
+                    val url = URL(raw)
+                    val host = url.host
+                    if (!isLocalOrTailscaleHost(host)) {
+                        throw SecurityException("URL non valido: '$host' non è un IP locale o Tailscale.\nIl QR deve provenire dal tuo Raspberry Pi.")
+                    }
+                    runOnUiThread { tvScanStatus.text = "🌐 Scarico configurazione da Raspberry..." }
+                    val conn = url.openConnection() as HttpURLConnection
+                    conn.connectTimeout = 8_000
+                    conn.readTimeout = 8_000
+                    conn.requestMethod = "GET"
+                    try {
+                        conn.connect()
+                        if (conn.responseCode != 200) {
+                            throw Exception("Errore server: HTTP ${conn.responseCode}")
+                        }
+                        conn.inputStream.bufferedReader(Charsets.UTF_8).readText()
+                    } finally {
+                        conn.disconnect()
+                    }
+                } else {
+                    raw // JSON diretto nel QR (legacy)
+                }
 
-            // Salva i certificati nella cartella attesa da ShadowClient
-            val certsDir = File(ShadowClient.CERTS_DIR).also { it.mkdirs() }
-            File(certsDir, "ca.crt").writeBytes(Base64.decode(caB64, Base64.DEFAULT))
-            File(certsDir, "client.crt").writeBytes(Base64.decode(crtB64, Base64.DEFAULT))
-            File(certsDir, "client.key").writeBytes(Base64.decode(keyB64, Base64.DEFAULT))
+                applyPairingPayload(jsonStr)
 
-            // Salva IP e porta
-            ShadowClient.saveConfig(this, ip, port)
-
-            runOnUiThread {
-                tvScanStatus.text = "✅ Configurazione completata!"
-                Toast.makeText(this, "✅ Pairing completato con $ip:$port", Toast.LENGTH_LONG).show()
-            }
-
-            // Torna alla MainActivity dopo 1.5s
-            previewView.postDelayed({ finish() }, 1500)
-
-        } catch (e: Exception) {
-            alreadyProcessed = false
-            runOnUiThread {
-                tvScanStatus.text = "❌ QR non valido — riprova"
+            } catch (e: Exception) {
+                alreadyProcessed = false
+                runOnUiThread {
+                    tvScanStatus.text = "❌ ${e.message}"
+                }
             }
         }
+    }
+
+    private fun applyPairingPayload(jsonStr: String) {
+        val json   = JSONObject(jsonStr)
+        val ip     = json.getString("ip")
+        val port   = json.getInt("port")
+        val caB64  = json.getString("ca")
+        val crtB64 = json.getString("crt")
+        val keyB64 = json.getString("key")
+
+        // Salva i certificati in modo atomico: scrivi su tmp, poi rinomina.
+        // Evita che un crash a metà lasci certificati corrotti/incompleti.
+        val certsDir = ShadowClient.getCertsDir(this).also { it.mkdirs() }
+        val tmpCa  = File(certsDir, "ca.crt.tmp")
+        val tmpCrt = File(certsDir, "client.crt.tmp")
+        val tmpKey = File(certsDir, "client.key.tmp")
+        try {
+            tmpCa.writeBytes(Base64.decode(caB64, Base64.DEFAULT))
+            tmpCrt.writeBytes(Base64.decode(crtB64, Base64.DEFAULT))
+            tmpKey.writeBytes(Base64.decode(keyB64, Base64.DEFAULT))
+            // Rinomina atomica: solo se tutti e tre i write hanno avuto successo
+            tmpCa.renameTo(File(certsDir, "ca.crt"))
+            tmpCrt.renameTo(File(certsDir, "client.crt"))
+            tmpKey.renameTo(File(certsDir, "client.key"))
+        } catch (e: Exception) {
+            tmpCa.delete(); tmpCrt.delete(); tmpKey.delete()
+            throw e
+        }
+
+        // Salva IP e porta
+        ShadowClient.saveConfig(this, ip, port)
+
+        runOnUiThread {
+            tvScanStatus.text = "✅ Configurazione completata!"
+            Toast.makeText(this, "✅ Pairing completato con $ip:$port", Toast.LENGTH_LONG).show()
+        }
+
+        // Torna alla MainActivity dopo 1.5s
+        previewView.postDelayed({ finish() }, 1500)
+    }
+
+    /**
+     * Verifica che l'host sia un IP locale o Tailscale, non un server pubblico.
+     * IP ammessi: 192.168.x.x, 10.x.x.x, 172.16-31.x.x, 127.x.x.x
+     * Tailscale: 100.64.0.0/10 → da 100.64.x.x a 100.127.x.x
+     *   (il range 100.0-63.x è CGNAT pubblico e NON è accettato)
+     */
+    private fun isLocalOrTailscaleHost(host: String): Boolean {
+        if (host.startsWith("192.168.") ||
+            host.startsWith("10.") ||
+            host.startsWith("127.") ||
+            host == "localhost" ||
+            Regex("""^172\.(1[6-9]|2\d|3[01])\.""").containsMatchIn(host)) {
+            return true
+        }
+        // Tailscale usa 100.64.0.0/10: secondo ottetto 64–127
+        val tailscaleMatch = Regex("""^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.""").containsMatchIn(host)
+        return tailscaleMatch
     }
 
     override fun onSupportNavigateUp(): Boolean { finish(); return true }

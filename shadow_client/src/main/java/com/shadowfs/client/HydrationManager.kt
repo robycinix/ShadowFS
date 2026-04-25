@@ -9,6 +9,8 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.io.File
+import java.util.Timer
+import java.util.TimerTask
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -30,8 +32,10 @@ class HydrationManager(private val context: Context, private val rootDir: String
     // Mappa anti-spam: evita di inviare richieste duplicate per lo stesso file
     private val activeHydrations = ConcurrentHashMap<String, Long>()
 
-    // File in fase di ghosting: l'idratazione è soppressa finché non scade il timer
+    // File in fase di ghosting: l'idratazione è soppressa finché non scade il timer.
+    // Usiamo Timer (non Handler) così il cleanup avviene anche se il service viene ricreato.
     private val suppressedFiles = ConcurrentHashMap.newKeySet<String>()
+    private val suppressionTimers = ConcurrentHashMap<String, Timer>()
 
     private val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
 
@@ -43,7 +47,7 @@ class HydrationManager(private val context: Context, private val rootDir: String
     private val recentAccessedFiles = mutableListOf<Pair<Long, String>>() // timestamp + path
     private val RATE_WINDOW_MS = 3_000L
     private val RATE_THRESHOLD = 3
-    private var suppressUntil = 0L
+    @Volatile private var suppressUntil = 0L
 
     private fun isRateLimited(filePath: String): Boolean {
         val now = System.currentTimeMillis()
@@ -71,15 +75,25 @@ class HydrationManager(private val context: Context, private val rootDir: String
         return false
     }
 
-    /** Sopprime l'idratazione per [path] per [durationMs] ms (chiamare prima di markAsGhost). */
+    /** Sopprime l'idratazione per [path] per [durationMs] ms (chiamare prima di markAsGhost).
+     *  Usa Timer invece di Handler: il cleanup avviene anche se il thread principale è morto. */
     fun suppressHydration(path: String, durationMs: Long = 60_000L) {
         suppressedFiles.add(path)
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            suppressedFiles.remove(path)
+        // Cancella eventuale timer precedente per lo stesso path
+        suppressionTimers.remove(path)?.cancel()
+        val t = Timer(true) // daemon timer: non blocca la JVM
+        suppressionTimers[path] = t
+        t.schedule(object : TimerTask() {
+            override fun run() {
+                suppressedFiles.remove(path)
+                suppressionTimers.remove(path)
+            }
         }, durationMs)
     }
 
-    private val observers = mutableListOf<FileObserver>()
+    // CopyOnWriteArrayList: onEvent(CREATE) può aggiungere osservatori da thread FileObserver
+    // mentre stop() itera la lista — mutableListOf causerebbe ConcurrentModificationException.
+    private val observers = java.util.concurrent.CopyOnWriteArrayList<FileObserver>()
 
     init {
         createNotificationChannel()
@@ -145,6 +159,8 @@ class HydrationManager(private val context: Context, private val rootDir: String
         observers.forEach { it.stopWatching() }
         observers.clear()
         activeHydrations.clear()
+        suppressionTimers.values.forEach { it.cancel() }
+        suppressionTimers.clear()
         Log.i(TAG, "Osservatori fermati.")
     }
 
@@ -167,6 +183,14 @@ class HydrationManager(private val context: Context, private val rootDir: String
                 // Crea il marker .reghost: il daemon ri-ghosterà questo file tra 1 ora
                 File(file.parent, file.name + ".reghost")
                     .writeText(System.currentTimeMillis().toString())
+
+                // Rendi il file nuovamente visibile a Gallery e Google Photos.
+                // IS_PENDING=0 → la foto riappare in Gallery con il contenuto completo.
+                // MediaScannerConnection aggiorna dimensione e thumb nel MediaStore.
+                VfsManager.setIsPending(context, file, pending = false)
+                android.media.MediaScannerConnection.scanFile(
+                    context, arrayOf(file.absolutePath), null, null
+                )
 
                 Log.i(TAG, "✅ Idratazione completata: ${file.name} (${file.length()} bytes)")
                 showCompletionNotification(notificationId, file.name)

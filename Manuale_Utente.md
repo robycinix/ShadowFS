@@ -73,6 +73,10 @@ adb push /opt/shadowfs/certs_for_android/client.key /sdcard/Download/shadowfs_ce
 
 In alternativa puoi usare **FileZilla** per scaricare i 3 file dal Raspberry e copiarli manualmente nella cartella `Download/shadowfs_certs/` del telefono.
 
+Quando l'app parte, importa automaticamente questi certificati nello storage
+privato dell'app. La cartella `Download/shadowfs_certs/` serve solo come punto di
+ingresso per il setup manuale.
+
 ### Passo 3 — Configura l'app
 
 1. Apri l'app **ShadowFS**
@@ -160,7 +164,7 @@ sudo systemctl start shadowfs
 
 ### "Certificati mancanti"
 I 3 file certificato non sono nella posizione giusta.
-Verifica che esistano in `Download/shadowfs_certs/` sul telefono (con esattamente quel nome di cartella).
+Verifica che esistano in `Download/shadowfs_certs/` sul telefono (con esattamente quel nome di cartella), poi riapri l'app per importarli nello storage privato.
 
 ### "Permesso Gestione File" non appare
 Vai in **Impostazioni → Privacy → Accesso speciale alle app → Accesso a tutti i file → ShadowFS** e attiva.
@@ -223,11 +227,12 @@ sqlite3 /opt/shadowfs/shadowfs.db \
 | Termine | Significato |
 |---------|-------------|
 | **Ghost** | File svuotato/sostituito con thumbnail sul telefono |
-| **Idratazione** | Riscaricamento del file originale dal Raspberry |
+| **Idratazione** | Riscaricamento verificato del file originale dal Raspberry |
 | **Re-ghost** | Ri-invio al Raspberry di un file idratato dopo 1 ora |
 | **mTLS** | Autenticazione reciproca con certificati (server + client) |
 | **Tailscale** | VPN che connette i tuoi dispositivi ovunque nel mondo |
 | **Marker .shadow** | File nascosto con i metadati del file ghostato |
+| **File .shadowdl.tmp** | Download temporaneo riprendibile, pubblicato solo dopo verifica |
 | **Orfano** | File sul Raspberry il cui originale è stato eliminato dal telefono |
 
 ---

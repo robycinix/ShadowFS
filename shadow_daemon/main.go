@@ -14,10 +14,11 @@ func main() {
 	addDevice := flag.String("add-device", "", "Genera certificati per un nuovo dispositivo (es: --add-device=telefono_mario)")
 	storagePath := flag.String("storage", "./shadow_root", "Percorso directory storage per i file offloaded")
 	dbPath := flag.String("db", "shadowfs.db", "Percorso database SQLite")
-	quicAddr := flag.String("addr", "0.0.0.0:4242", "Indirizzo UDP per QUIC (futuro)")
-	tcpAddr := flag.String("tcp-addr", "0.0.0.0:4243", "Indirizzo TCP+TLS per il client Android")
+	quicAddr    := flag.String("addr", "0.0.0.0:4242", "Indirizzo UDP per QUIC sperimentale (non avviato)")
+	tcpAddr     := flag.String("tcp-addr", "0.0.0.0:4243", "Indirizzo TCP+TLS per il client Android")
+	pairingAddr := flag.String("pairing-addr", "0.0.0.0:4244", "Indirizzo HTTP per il pairing QR Code")
 	serverIPsStr := flag.String("server-ip", "", "IP del server da aggiungere al certificato TLS (es: 100.80.33.12). Più IP separati da virgola.")
-	_ = quicAddr // QUIC disponibile ma TCP è la via principale per Android
+	_ = quicAddr // QUIC è parcheggiato: TCP+mTLS è la via supportata per Android.
 
 	flag.Parse()
 
@@ -81,14 +82,25 @@ func main() {
 	}
 	defer db.Close()
 
-	// 4. Scansione iniziale della cartella storage
-	fmt.Printf("🔍 Scansione iniziale di '%s'...\n", *storagePath)
-	if err := ScanFolder(db, *storagePath); err != nil {
-		log.Printf("⚠️ Errore durante la scansione: %v", err)
-	}
-	fmt.Println("✅ Scansione completata.")
+	// 4. Scansione iniziale della cartella storage (in background per non bloccare il server)
+	// Su storage pieno il calcolo SHA-256 può richiedere minuti: il server deve essere
+	// raggiungibile immediatamente, non solo al termine della scansione.
+	go func() {
+		fmt.Printf("🔍 Scansione iniziale di '%s' (background)...\n", *storagePath)
+		if err := ScanFolder(db, *storagePath); err != nil {
+			log.Printf("⚠️ Errore durante la scansione: %v", err)
+		}
+		fmt.Println("✅ Scansione completata.")
+	}()
 
-	// 5. Avvia il server TCP+TLS (principale — compatibile con Android)
+	// 5. Inizializza il token di pairing (sincrono) poi avvia il server HTTP in background.
+	// InitPairingToken() deve precedere la goroutine per evitare che PrintPairingInfo
+	// legga un token vuoto (race condition).
+	InitPairingToken()
+	go StartPairingServer(*pairingAddr, *tcpAddr, "certs_for_android")
+	PrintPairingInfo(*pairingAddr)
+
+	// 6. Avvia il server TCP+TLS (principale — compatibile con Android)
 	fmt.Printf("🚀 Avvio ShadowDaemon TCP+mTLS su %s...\n", *tcpAddr)
 	fmt.Println("   (In attesa di connessioni dall'app Android...)")
 	fmt.Println()
