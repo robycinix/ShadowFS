@@ -83,7 +83,7 @@ class GhostListActivity : AppCompatActivity() {
         Thread {
             val root = File(Environment.getExternalStorageDirectory().absolutePath)
             val entries = root.walkTopDown()
-                .filter { it.isFile && it.name.endsWith(".shadow") }
+                .filter { isUserVisibleShadow(it) }
                 .sortedByDescending { it.lastModified() }
                 .map { shadowFile ->
                     val originalName = shadowFile.name.removeSuffix(".shadow")
@@ -299,7 +299,7 @@ class GhostListActivity : AppCompatActivity() {
         Thread {
             val root = File(Environment.getExternalStorageDirectory().absolutePath)
             val phoneFiles = root.walkTopDown()
-                .filter { it.isFile && it.name.endsWith(".shadow") }
+                .filter { isUserVisibleShadow(it) }
                 .map { shadowFile ->
                     shadowFile.absolutePath
                         .removePrefix(root.absolutePath)
@@ -345,6 +345,13 @@ class GhostListActivity : AppCompatActivity() {
                 }
             }
         }.start()
+    }
+
+    private fun isUserVisibleShadow(file: File): Boolean {
+        if (!file.isFile || !file.name.endsWith(".shadow")) return false
+        if (file.absolutePath.contains("/.pending-")) return false
+        val originalName = file.name.removeSuffix(".shadow")
+        return !originalName.startsWith(".pending-")
     }
 
     /** Elimina tutti gli orfani dal Raspberry uno per uno */

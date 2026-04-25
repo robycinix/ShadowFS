@@ -637,7 +637,7 @@ class MainActivity : AppCompatActivity() {
         Thread {
             val root = File(Environment.getExternalStorageDirectory().absolutePath)
             val shadowFiles = root.walkTopDown()
-                .filter { it.isFile && it.name.endsWith(".shadow") }
+                .filter { isUserVisibleShadow(it) }
                 .toList()
 
             val totalRecovered = shadowFiles.sumOf { shadowFile ->
@@ -657,6 +657,13 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }.start()
+    }
+
+    private fun isUserVisibleShadow(file: File): Boolean {
+        if (!file.isFile || !file.name.endsWith(".shadow")) return false
+        if (file.absolutePath.contains("/.pending-")) return false
+        val originalName = file.name.removeSuffix(".shadow")
+        return !originalName.startsWith(".pending-")
     }
 
     private fun formatSize(bytes: Long): String = when {
