@@ -32,6 +32,14 @@ class HydrationManager(private val context: Context, private val rootDir: String
     // Mappa anti-spam: evita di inviare richieste duplicate per lo stesso file
     private val activeHydrations = ConcurrentHashMap<String, Long>()
 
+    // La Galleria apre spesso i file in background per anteprime/prefetch.
+    // Il primo OPEN su un ghost quindi non idrata: registra solo l'intenzione.
+    // Un secondo OPEN ravvicinato sullo stesso file e' un segnale piu' forte
+    // di apertura esplicita da parte dell'utente.
+    private val pendingHydrationOpens = ConcurrentHashMap<String, Long>()
+    private val HYDRATION_CONFIRM_MIN_DELAY_MS = 1_000L
+    private val HYDRATION_CONFIRM_WINDOW_MS = 30_000L
+
     // File in fase di ghosting: l'idratazione è soppressa finché non scade il timer.
     // Usiamo Timer (non Handler) così il cleanup avviene anche se il service viene ricreato.
     private val suppressedFiles = ConcurrentHashMap.newKeySet<String>()
@@ -133,6 +141,11 @@ class HydrationManager(private val context: Context, private val rootDir: String
                     if (file.exists() && file.isFile && shadowMarker.exists() &&
                         file.length() < originalSize && !suppressedFiles.contains(file.absolutePath)) {
 
+                        if (!isConfirmedUserOpen(file.absolutePath)) {
+                            Log.d(TAG, "Ghost access armato, attendo conferma utente: ${file.name}")
+                            return
+                        }
+
                         val now = System.currentTimeMillis()
                         val lastRequest = activeHydrations[file.absolutePath] ?: 0L
 
@@ -159,9 +172,24 @@ class HydrationManager(private val context: Context, private val rootDir: String
         observers.forEach { it.stopWatching() }
         observers.clear()
         activeHydrations.clear()
+        pendingHydrationOpens.clear()
         suppressionTimers.values.forEach { it.cancel() }
         suppressionTimers.clear()
         Log.i(TAG, "Osservatori fermati.")
+    }
+
+    private fun isConfirmedUserOpen(filePath: String): Boolean {
+        val now = System.currentTimeMillis()
+        val firstOpen = pendingHydrationOpens[filePath]
+        if (firstOpen == null || now - firstOpen > HYDRATION_CONFIRM_WINDOW_MS) {
+            pendingHydrationOpens[filePath] = now
+            return false
+        }
+        if (now - firstOpen < HYDRATION_CONFIRM_MIN_DELAY_MS) {
+            return false
+        }
+        pendingHydrationOpens.remove(filePath)
+        return true
     }
 
     private fun triggerHydration(file: File) {
