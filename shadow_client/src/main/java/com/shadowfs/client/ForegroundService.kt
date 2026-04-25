@@ -79,6 +79,10 @@ class ShadowForegroundService : Service() {
     // Blacklist: estensioni di sistema/database da ignorare sempre
     private val IGNORED_EXTENSIONS = listOf(".apk", ".nomedia", ".db", ".ini", ".temp", ".shadow", ".reghost")
 
+    // MediaStore crea nomi temporanei .pending-* quando un file e' nascosto con IS_PENDING.
+    // Non sono sorgenti reali da offloadare.
+    private val IGNORED_PREFIXES = listOf(".pending-")
+
     // Soglia minima: file sotto i 512 KB non vengono ghostati
     private val MIN_FILE_SIZE_BYTES = 1024 * 512L
 
@@ -149,6 +153,8 @@ class ShadowForegroundService : Service() {
                     val ext = "." + file.extension.lowercase()
                     ALLOWED_EXTENSIONS.contains(ext) &&
                     IGNORED_EXTENSIONS.none { file.name.endsWith(it) } &&
+                    IGNORED_PREFIXES.none { file.name.startsWith(it) } &&
+                    !File(file.parentFile, file.name + ".shadow").exists() &&
                     file.length() > MIN_FILE_SIZE_BYTES &&
                     (force || file.lastModified() < thresholdTime)
                 }
@@ -208,7 +214,26 @@ class ShadowForegroundService : Service() {
         isRetry: Boolean,
         onDone: ((Boolean) -> Unit)? = null
     ) {
+        if (File(file.parentFile, file.name + ".shadow").exists()) {
+            android.util.Log.i("ShadowFS", "Skip upload: file già ghostato: $relPath")
+            removeFromRetryQueue(relPath)
+            onDone?.invoke(false)
+            return
+        }
+        if (file.name.startsWith(".pending-")) {
+            android.util.Log.i("ShadowFS", "Skip upload: file temporaneo MediaStore: $relPath")
+            removeFromRetryQueue(relPath)
+            onDone?.invoke(false)
+            return
+        }
+
         val fileSize = file.length()
+        if (fileSize <= 0L) {
+            android.util.Log.i("ShadowFS", "Skip upload: file vuoto: $relPath")
+            removeFromRetryQueue(relPath)
+            onDone?.invoke(false)
+            return
+        }
         val showProgress = fileSize > 5 * 1024 * 1024 // progress solo per file > 5 MB
         activeUploads.incrementAndGet()
 
