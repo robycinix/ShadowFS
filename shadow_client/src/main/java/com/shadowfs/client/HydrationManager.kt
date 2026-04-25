@@ -39,6 +39,7 @@ class HydrationManager(private val context: Context, private val rootDir: String
     private val pendingHydrationOpens = ConcurrentHashMap<String, Long>()
     private val HYDRATION_CONFIRM_MIN_DELAY_MS = 1_000L
     private val HYDRATION_CONFIRM_WINDOW_MS = 30_000L
+    private val AUTO_HYDRATION_PREF = "auto_hydration_enabled"
 
     // File in fase di ghosting: l'idratazione è soppressa finché non scade il timer.
     // Usiamo Timer (non Handler) così il cleanup avviene anche se il service viene ricreato.
@@ -141,6 +142,11 @@ class HydrationManager(private val context: Context, private val rootDir: String
                     if (file.exists() && file.isFile && shadowMarker.exists() &&
                         file.length() < originalSize && !suppressedFiles.contains(file.absolutePath)) {
 
+                        if (!isAutoHydrationEnabled()) {
+                            Log.d(TAG, "Auto-idratazione disattivata, ignoro OPEN da app esterna: ${file.name}")
+                            return
+                        }
+
                         if (!isConfirmedUserOpen(file.absolutePath)) {
                             Log.d(TAG, "Ghost access armato, attendo conferma utente: ${file.name}")
                             return
@@ -177,6 +183,10 @@ class HydrationManager(private val context: Context, private val rootDir: String
         suppressionTimers.clear()
         Log.i(TAG, "Osservatori fermati.")
     }
+
+    private fun isAutoHydrationEnabled(): Boolean =
+        context.getSharedPreferences(ShadowClient.PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(AUTO_HYDRATION_PREF, false)
 
     private fun isConfirmedUserOpen(filePath: String): Boolean {
         val now = System.currentTimeMillis()

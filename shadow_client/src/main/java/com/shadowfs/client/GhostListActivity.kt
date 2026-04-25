@@ -1,6 +1,7 @@
 package com.shadowfs.client
 
 import android.app.AlertDialog
+import android.media.MediaScannerConnection
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.Bundle
@@ -197,6 +198,17 @@ class GhostListActivity : AppCompatActivity() {
                 )
             }
 
+            val btnRestore = Button(this).apply {
+                text = "Ripristina"
+                textSize = 12f
+                setTextColor(Color.parseColor("#80D0A0"))
+                setPadding(8, 0, 8, 0)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).also { it.setMargins(8, 0, 8, 0) }
+            }
+
             btnDelete.setOnClickListener {
                 AlertDialog.Builder(this)
                     .setTitle("Elimina file")
@@ -219,7 +231,19 @@ class GhostListActivity : AppCompatActivity() {
                     .show()
             }
 
+            btnRestore.setOnClickListener {
+                AlertDialog.Builder(this)
+                    .setTitle("Ripristina file")
+                    .setMessage("Scaricare '${entry.originalName}' dal Raspberry e renderlo di nuovo disponibile sul telefono?")
+                    .setPositiveButton("Ripristina") { _, _ ->
+                        restoreGhost(entry, btnRestore)
+                    }
+                    .setNegativeButton("Annulla", null)
+                    .show()
+            }
+
             rowTop.addView(tvName)
+            rowTop.addView(btnRestore)
             rowTop.addView(btnDelete)
 
             val tvDetails = TextView(this).apply {
@@ -237,6 +261,31 @@ class GhostListActivity : AppCompatActivity() {
         }
 
         tvRecoveredTotal.text = "Recuperati: ${formatSize(totalRecovered)}"
+    }
+
+    private fun restoreGhost(entry: GhostEntry, button: Button) {
+        button.isEnabled = false
+        button.text = "..."
+        ShadowClient.download(this, entry.relPath, entry.localFile) { success ->
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (success) {
+                    entry.shadowFile.delete()
+                    File(entry.localFile.parentFile, entry.localFile.name + ".reghost")
+                        .writeText(System.currentTimeMillis().toString())
+                    VfsManager.setIsPending(this, entry.localFile, pending = false)
+                    MediaScannerConnection.scanFile(
+                        this, arrayOf(entry.localFile.absolutePath), null, null
+                    )
+                    Toast.makeText(this, "✅ '${entry.originalName}' ripristinato", Toast.LENGTH_SHORT).show()
+                    loadGhostFiles()
+                } else {
+                    Toast.makeText(this, "❌ Ripristino fallito", Toast.LENGTH_LONG).show()
+                    button.text = "Ripristina"
+                    button.isEnabled = true
+                }
+            }
+        }
     }
 
     /** Confronta i file .shadow sul telefono con quelli sul Raspberry e mostra gli orfani.
