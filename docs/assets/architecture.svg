@@ -1,0 +1,82 @@
+<svg width="1200" height="520" viewBox="0 0 1200 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">ShadowFS architecture</title>
+  <desc id="desc">Android phone sends verified file data through mutual TLS to a Raspberry Pi daemon with SQLite and local storage.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="520" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#081018"/>
+      <stop offset="0.52" stop-color="#0B1720"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="160" y1="0" x2="1040" y2="520" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38BDF8"/>
+      <stop offset="0.48" stop-color="#34D399"/>
+      <stop offset="1" stop-color="#F43F5E"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#132231"/>
+      <stop offset="1" stop-color="#0B121C"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-80%" width="180%" height="260%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.2 0 0 0 0 0.9 0 0 0 0 0.75 0 0 0 0.65 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style>
+      .label{font:700 28px system-ui,-apple-system,Segoe UI,sans-serif;fill:#E5F6FF}
+      .sub{font:500 17px system-ui,-apple-system,Segoe UI,sans-serif;fill:#9FB3C8}
+      .chip{font:700 14px system-ui,-apple-system,Segoe UI,sans-serif;fill:#BFFFE9}
+      .tiny{font:600 13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;fill:#7DD3FC}
+    </style>
+  </defs>
+
+  <rect width="1200" height="520" rx="30" fill="url(#bg)"/>
+  <path d="M72 420C210 260 330 290 470 245C625 195 675 110 850 105C965 102 1050 148 1132 88" stroke="url(#cyan)" stroke-width="2" opacity=".28"/>
+  <path d="M88 448C220 322 368 342 516 276C662 211 704 173 850 173C965 173 1040 223 1120 168" stroke="url(#cyan)" stroke-width="2" opacity=".2"/>
+
+  <rect x="68" y="72" width="312" height="376" rx="28" fill="url(#panel)" stroke="#244256"/>
+  <rect x="110" y="112" width="228" height="296" rx="24" fill="#020817" stroke="#1F3446"/>
+  <circle cx="224" cy="132" r="6" fill="#26394A"/>
+  <rect x="132" y="166" width="56" height="56" rx="12" fill="#10283A" stroke="#25506A"/>
+  <rect x="204" y="166" width="56" height="56" rx="12" fill="#10283A" stroke="#25506A"/>
+  <rect x="276" y="166" width="40" height="56" rx="12" fill="#10283A" stroke="#25506A"/>
+  <rect x="132" y="238" width="56" height="56" rx="12" fill="#143044" stroke="#25635E"/>
+  <rect x="204" y="238" width="56" height="56" rx="12" fill="#143044" stroke="#25635E"/>
+  <rect x="276" y="238" width="40" height="56" rx="12" fill="#143044" stroke="#25635E"/>
+  <path d="M144 187H177M144 202H169M216 187H248M216 202H239M144 259H177M144 274H169M216 259H248M216 274H239" stroke="#7DD3FC" stroke-width="4" stroke-linecap="round" opacity=".72"/>
+  <circle cx="224" cy="352" r="34" fill="#052B28" stroke="#34D399" stroke-width="6"/>
+  <path d="M211 350L221 360L239 338" stroke="#BFFFE9" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="224" y="472" text-anchor="middle" class="label">Android Client</text>
+  <text x="224" y="498" text-anchor="middle" class="sub">Kotlin app + ForegroundService</text>
+
+  <g filter="url(#glow)">
+    <path d="M410 250C470 188 535 188 595 250C655 312 720 312 790 250" stroke="url(#cyan)" stroke-width="8" stroke-linecap="round"/>
+    <path d="M410 295C490 245 560 245 640 295C705 336 746 328 790 295" stroke="#38BDF8" stroke-width="3" stroke-linecap="round" opacity=".65"/>
+    <path d="M410 205C490 255 560 255 640 205C705 164 746 172 790 205" stroke="#34D399" stroke-width="3" stroke-linecap="round" opacity=".65"/>
+  </g>
+  <rect x="492" y="211" width="216" height="82" rx="22" fill="#06151F" stroke="#1B4D61"/>
+  <text x="600" y="245" text-anchor="middle" class="chip">TLS 1.3 + mTLS</text>
+  <text x="600" y="270" text-anchor="middle" class="tiny">SHA-256 verified stream</text>
+
+  <rect x="820" y="72" width="312" height="376" rx="28" fill="url(#panel)" stroke="#244256"/>
+  <rect x="870" y="122" width="212" height="276" rx="24" fill="#090F16" stroke="#334155"/>
+  <rect x="902" y="158" width="96" height="138" rx="16" fill="#111827" stroke="#475569"/>
+  <circle cx="950" cy="226" r="32" fill="#020617" stroke="#334155" stroke-width="6"/>
+  <circle cx="950" cy="226" r="12" fill="#E11D48"/>
+  <path d="M938 212C946 207 954 207 962 212M936 238C946 248 956 248 966 238" stroke="#34D399" stroke-width="5" stroke-linecap="round"/>
+  <rect x="1016" y="162" width="28" height="18" rx="4" fill="#38BDF8"/>
+  <rect x="1016" y="194" width="28" height="18" rx="4" fill="#38BDF8"/>
+  <rect x="1016" y="226" width="28" height="18" rx="4" fill="#94A3B8"/>
+  <rect x="1016" y="258" width="28" height="18" rx="4" fill="#94A3B8"/>
+  <rect x="902" y="320" width="142" height="18" rx="6" fill="#0F172A" stroke="#334155"/>
+  <rect x="902" y="350" width="142" height="18" rx="6" fill="#0F172A" stroke="#334155"/>
+  <circle cx="1070" cy="330" r="5" fill="#22C55E"/>
+  <circle cx="1070" cy="352" r="5" fill="#F43F5E"/>
+  <text x="976" y="472" text-anchor="middle" class="label">Raspberry Pi Daemon</text>
+  <text x="976" y="498" text-anchor="middle" class="sub">Go service + SQLite + local disk</text>
+
+  <rect x="88" y="32" width="1024" height="34" rx="17" fill="#07131D" stroke="#1E3A4A"/>
+  <text x="600" y="55" text-anchor="middle" class="tiny">Self-hosted file ghosting: phone storage gets lighter, original bytes stay on your hardware</text>
+</svg>
