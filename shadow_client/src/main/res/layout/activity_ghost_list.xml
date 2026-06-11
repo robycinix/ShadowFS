@@ -18,7 +18,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="👻 File Ghostati"
+            android:text="@string/ghost_list_header"
             android:textColor="#E0E0FF"
             android:textSize="20sp"
             android:textStyle="bold"/>
@@ -45,7 +45,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="0 file ghostati"
+            android:text="@string/ghost_count_initial"
             android:textColor="#8080A0"
             android:textSize="13sp"/>
 
@@ -81,7 +81,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:text="Nessun file ghostato.\nPremi 'Libera Spazio' nella schermata principale."
+        android:text="@string/ghost_empty_message"
         android:textColor="#404050"
         android:textSize="14sp"
         android:gravity="center"
@@ -102,7 +102,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="🗑 File orfani sul Raspberry"
+            android:text="@string/orphans_header"
             android:textColor="#FF8080"
             android:textSize="13sp"
             android:textStyle="bold"/>
@@ -111,7 +111,7 @@
             android:id="@+id/btn_sync"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="🔍 Controlla"
+            android:text="@string/button_check"
             android:backgroundTint="#3A1A1A"
             android:textColor="#FF8080"
             android:textSize="12sp"/>
@@ -121,7 +121,7 @@
         android:id="@+id/tv_orphans_info"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="File presenti sul Raspberry ma eliminati dal telefono."
+        android:text="@string/orphans_info"
         android:textColor="#606070"
         android:textSize="11sp"
         android:paddingStart="16dp"
@@ -139,7 +139,7 @@
         android:id="@+id/btn_delete_orphans"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="🗑 Elimina tutti gli orfani dal Raspberry"
+        android:text="@string/button_delete_orphans"
         android:backgroundTint="#3A1A1A"
         android:textColor="#FF6060"
         android:layout_margin="8dp"

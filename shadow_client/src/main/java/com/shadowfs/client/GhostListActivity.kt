@@ -33,7 +33,7 @@ class GhostListActivity : AppCompatActivity() {
 
         supportActionBar?.apply {
             setDisplayHomeAsUpEnabled(true)
-            title = "File Ghostati"
+            title = getString(R.string.ghost_list_title)
         }
 
         containerGhostList = findViewById(R.id.container_ghost_list)
@@ -48,10 +48,10 @@ class GhostListActivity : AppCompatActivity() {
 
         btnDeleteOrphans.setOnClickListener {
             AlertDialog.Builder(this)
-                .setTitle("Elimina orfani dal Raspberry")
-                .setMessage("Eliminare ${currentOrphans.size} file dal Raspberry?\n\nSono file che hai già cancellato dal telefono. L'operazione è irreversibile.")
-                .setPositiveButton("Elimina tutto") { _, _ -> deleteAllOrphans() }
-                .setNegativeButton("Annulla", null)
+                .setTitle(R.string.delete_orphans_title)
+                .setMessage(getString(R.string.delete_orphans_message, currentOrphans.size))
+                .setPositiveButton(R.string.button_delete_all) { _, _ -> deleteAllOrphans() }
+                .setNegativeButton(R.string.button_cancel, null)
                 .show()
         }
 
@@ -76,7 +76,7 @@ class GhostListActivity : AppCompatActivity() {
     /** Avvia la scansione in background per evitare ANR su storage pieno */
     private fun loadGhostFiles() {
         containerGhostList.removeAllViews()
-        tvGhostCount.text = "⏳ Caricamento..."
+        tvGhostCount.setText(R.string.ghost_count_loading)
         tvEmpty.visibility = View.GONE
         containerGhostList.visibility = View.GONE
 
@@ -117,13 +117,13 @@ class GhostListActivity : AppCompatActivity() {
             tvEmpty.visibility = View.VISIBLE
             containerGhostList.visibility = View.GONE
             tvRecoveredTotal.text = ""
-            tvGhostCount.text = "Nessun file ghostato"
+            tvGhostCount.setText(R.string.ghost_count_empty)
             return
         }
 
         tvEmpty.visibility = View.GONE
         containerGhostList.visibility = View.VISIBLE
-        tvGhostCount.text = "${entries.size} file ghostati"
+        tvGhostCount.text = getString(R.string.ghost_count_value, entries.size)
 
         val totalRecovered = entries.sumOf { it.originalSize }
 
@@ -199,7 +199,7 @@ class GhostListActivity : AppCompatActivity() {
             }
 
             val btnRestore = Button(this).apply {
-                text = "Ripristina"
+                text = getString(R.string.button_restore)
                 textSize = 12f
                 setTextColor(Color.parseColor("#80D0A0"))
                 setPadding(8, 0, 8, 0)
@@ -211,34 +211,34 @@ class GhostListActivity : AppCompatActivity() {
 
             btnDelete.setOnClickListener {
                 AlertDialog.Builder(this)
-                    .setTitle("Elimina file")
-                    .setMessage("Elimini '${entry.originalName}' anche dal Raspberry Pi?\n\nL'operazione è irreversibile.")
-                    .setPositiveButton("Elimina") { _, _ ->
+                    .setTitle(R.string.delete_file_title)
+                    .setMessage(getString(R.string.delete_file_message, entry.originalName))
+                    .setPositiveButton(R.string.button_delete) { _, _ ->
                         btnDelete.isEnabled = false
                         ShadowClient.delete(this, entry.relPath, entry.localFile) { success ->
                             runOnUiThread {
                                 if (success) {
-                                    Toast.makeText(this, "✅ '${entry.originalName}' eliminato", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(this, getString(R.string.toast_file_deleted, entry.originalName), Toast.LENGTH_SHORT).show()
                                     loadGhostFiles()
                                 } else {
-                                    Toast.makeText(this, "❌ Errore durante l'eliminazione", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(this, R.string.toast_delete_error, Toast.LENGTH_LONG).show()
                                     btnDelete.isEnabled = true
                                 }
                             }
                         }
                     }
-                    .setNegativeButton("Annulla", null)
+                    .setNegativeButton(R.string.button_cancel, null)
                     .show()
             }
 
             btnRestore.setOnClickListener {
                 AlertDialog.Builder(this)
-                    .setTitle("Ripristina file")
-                    .setMessage("Scaricare '${entry.originalName}' dal Raspberry e renderlo di nuovo disponibile sul telefono?")
-                    .setPositiveButton("Ripristina") { _, _ ->
+                    .setTitle(R.string.restore_file_title)
+                    .setMessage(getString(R.string.restore_file_message, entry.originalName))
+                    .setPositiveButton(R.string.button_restore) { _, _ ->
                         restoreGhost(entry, btnRestore)
                     }
-                    .setNegativeButton("Annulla", null)
+                    .setNegativeButton(R.string.button_cancel, null)
                     .show()
             }
 
@@ -260,7 +260,7 @@ class GhostListActivity : AppCompatActivity() {
             containerGhostList.addView(card)
         }
 
-        tvRecoveredTotal.text = "Recuperati: ${formatSize(totalRecovered)}"
+        tvRecoveredTotal.text = getString(R.string.recovered_total, formatSize(totalRecovered))
     }
 
     private fun restoreGhost(entry: GhostEntry, button: Button) {
@@ -277,11 +277,11 @@ class GhostListActivity : AppCompatActivity() {
                     MediaScannerConnection.scanFile(
                         this, arrayOf(entry.localFile.absolutePath), null, null
                     )
-                    Toast.makeText(this, "✅ '${entry.originalName}' ripristinato", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, getString(R.string.toast_file_restored, entry.originalName), Toast.LENGTH_SHORT).show()
                     loadGhostFiles()
                 } else {
-                    Toast.makeText(this, "❌ Ripristino fallito", Toast.LENGTH_LONG).show()
-                    button.text = "Ripristina"
+                    Toast.makeText(this, R.string.toast_restore_failed, Toast.LENGTH_LONG).show()
+                    button.setText(R.string.button_restore)
                     button.isEnabled = true
                 }
             }
@@ -292,7 +292,7 @@ class GhostListActivity : AppCompatActivity() {
      *  La scansione avviene in background per non bloccare il main thread. */
     private fun checkOrphans() {
         btnSync.isEnabled = false
-        btnSync.text = "🔄 Controllo..."
+        btnSync.setText(R.string.button_checking)
         containerOrphans.removeAllViews()
         btnDeleteOrphans.visibility = View.GONE
 
@@ -318,12 +318,12 @@ class GhostListActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     btnSync.isEnabled = true
-                    btnSync.text = "🔍 Controlla"
+                    btnSync.setText(R.string.button_check)
                     currentOrphans = orphans
 
                     if (orphans.isEmpty()) {
                         val tv = TextView(this).apply {
-                            text = "✅ Nessun orfano — il Raspberry è in sync con il telefono."
+                            text = getString(R.string.orphans_none)
                             textSize = 13f
                             setTextColor(Color.parseColor("#80D0A0"))
                             setPadding(8, 8, 8, 8)
@@ -331,7 +331,7 @@ class GhostListActivity : AppCompatActivity() {
                         containerOrphans.addView(tv)
                     } else {
                         val header = TextView(this).apply {
-                            text = "${orphans.size} file trovati sul Raspberry ma non sul telefono:"
+                            text = getString(R.string.orphans_found_header, orphans.size)
                             textSize = 12f
                             setTextColor(Color.parseColor("#FF8080"))
                             setPadding(8, 4, 8, 8)
@@ -376,9 +376,9 @@ class GhostListActivity : AppCompatActivity() {
             if (index >= total) {
                 runOnUiThread {
                     val msg = if (failed == 0)
-                        "✅ Eliminati $deleted/$total file dal Raspberry"
+                        getString(R.string.delete_orphans_success, deleted, total)
                     else
-                        "⚠️ Eliminati $deleted/$total — $failed falliti (Raspberry irraggiungibile?)"
+                        getString(R.string.delete_orphans_partial, deleted, total, failed)
                     Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
                     btnDeleteOrphans.isEnabled = true
                     checkOrphans()

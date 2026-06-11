@@ -297,7 +297,7 @@ class HydrationManager(private val context: Context, private val rootDir: String
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "ShadowFS Idratazione",
+                context.getString(R.string.hydration_channel_name),
                 NotificationManager.IMPORTANCE_DEFAULT
             )
             notificationManager.createNotificationChannel(channel)
@@ -308,7 +308,7 @@ class HydrationManager(private val context: Context, private val rootDir: String
         val notif = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle("ShadowFS")
-            .setContentText("Scaricando '$fileName' dal Raspberry Pi...")
+            .setContentText(context.getString(R.string.notif_hydrating_text, fileName))
             .setProgress(100, 0, true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
@@ -319,7 +319,7 @@ class HydrationManager(private val context: Context, private val rootDir: String
         val notif = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle("ShadowFS")
-            .setContentText("'$fileName' ripristinato e disponibile.")
+            .setContentText(context.getString(R.string.notif_hydration_done_text, fileName))
             .setProgress(0, 0, false)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setAutoCancel(true)
@@ -328,13 +328,10 @@ class HydrationManager(private val context: Context, private val rootDir: String
     }
 
     private fun showBudgetExceededNotification() {
-        val text = "Troppe idratazioni automatiche nell'ultima ora: probabilmente un'app di " +
-            "backup cloud (Google/Amazon Photos) sta scandendo i file ghost in loop. " +
-            "Idratazione in pausa per un po'. Suggerimento: disattiva il backup cloud " +
-            "per le cartelle gestite da ShadowFS."
+        val text = context.getString(R.string.notif_hydration_budget_text)
         val notif = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
-            .setContentTitle("ShadowFS — Possibile loop con app cloud")
+            .setContentTitle(context.getString(R.string.notif_hydration_budget_title))
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -346,8 +343,8 @@ class HydrationManager(private val context: Context, private val rootDir: String
     private fun showFailureNotification(id: Int, fileName: String) {
         val notif = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle("Errore ShadowFS")
-            .setContentText("Impossibile recuperare '$fileName' — Raspberry irraggiungibile.")
+            .setContentTitle(context.getString(R.string.notif_shadowfs_error_title))
+            .setContentText(context.getString(R.string.notif_hydration_failed_text, fileName))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()

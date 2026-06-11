@@ -535,9 +535,12 @@ object ShadowClient {
             try {
                 val ip = getServerIp(context)
                 val port = getServerPort(context)
-                if (ip.isEmpty()) { onResult(false, "IP non configurato"); return@submit }
+                if (ip.isEmpty()) {
+                    onResult(false, context.getString(R.string.connection_ip_not_configured))
+                    return@submit
+                }
                 if (!areCertsPresent(context)) {
-                    onResult(false, "Certificati mancanti in ${getCertsDisplayPath(context)}")
+                    onResult(false, context.getString(R.string.connection_missing_certs, getCertsDisplayPath(context)))
                     return@submit
                 }
 
@@ -545,9 +548,9 @@ object ShadowClient {
                     // Basta aprire la connessione TLS per verificare che funzioni
                     ssl.outputStream.flush()
                 }
-                onResult(true, "Connesso a $ip:$port ✓")
+                onResult(true, context.getString(R.string.connection_success, ip, port))
             } catch (e: Exception) {
-                onResult(false, "Errore: ${e.message}")
+                onResult(false, context.getString(R.string.connection_error, e.message))
             }
         }
     }

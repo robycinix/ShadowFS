@@ -124,11 +124,11 @@ class MainActivity : AppCompatActivity() {
             val port = portStr.toIntOrNull() ?: 4243
 
             if (ip.isEmpty()) {
-                toast("Inserisci l'IP del Raspberry Pi")
+                toast(R.string.toast_enter_raspberry_ip)
                 return@setOnClickListener
             }
             ShadowClient.saveConfig(this, ip, port)
-            toast("✅ Configurazione salvata: $ip:$port")
+            toast(R.string.toast_config_saved, ip, port)
             refreshUI()
         }
 
@@ -144,7 +144,7 @@ class MainActivity : AppCompatActivity() {
                     startActivity(fallback)
                 }
             } else {
-                toast("Permesso già disponibile su Android < 11")
+                toast(R.string.toast_permission_already_available)
             }
         }
 
@@ -157,10 +157,10 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     startService(intent)
                 }
-                toast("▶ Shadow Daemon avviato")
+                toast(R.string.toast_daemon_started)
             } else {
                 stopService(intent)
-                toast("⏹ Shadow Daemon fermato")
+                toast(R.string.toast_daemon_stopped)
             }
             // Breve delay prima di aggiornare UI per dare tempo al servizio di avviarsi
             btnStartService.postDelayed({ refreshUI() }, 500)
@@ -184,13 +184,13 @@ class MainActivity : AppCompatActivity() {
         // Forza lo svuotamento immediato dei file idonei
         btnForceOffload.setOnClickListener {
             if (!isServiceRunning()) {
-                toast("Avvia prima il Shadow Daemon")
+                toast(R.string.toast_start_daemon_first)
                 return@setOnClickListener
             }
             val intent = Intent(this, ShadowForegroundService::class.java)
             intent.action = "FORCE_OFFLOAD"
             startService(intent)
-            toast("⚡ Offload forzato in corso...")
+            toast(R.string.toast_force_offload_running)
         }
 
         // Gestione cartelle protette (mai ghostate)
@@ -209,9 +209,9 @@ class MainActivity : AppCompatActivity() {
                 .putBoolean("auto_hydration_enabled", enabled)
                 .apply()
             toast(if (enabled)
-                "💧 Idratazione automatica attiva: apri un file ghost 2 volte per riscaricarlo"
+                getString(R.string.toast_auto_hydration_enabled)
             else
-                "Idratazione automatica disattivata — usa 'Ripristina' nella lista ghost")
+                getString(R.string.toast_auto_hydration_disabled))
         }
 
         // Richiedi esenzione da Doze/battery optimization.
@@ -227,7 +227,7 @@ class MainActivity : AppCompatActivity() {
                     try {
                         startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
                     } catch (_: Exception) {
-                        toast("Apri Impostazioni → Batteria → Ottimizzazione → ShadowFS → Non ottimizzare")
+                        toast(R.string.toast_open_battery_settings)
                     }
                 }
             }
@@ -236,10 +236,10 @@ class MainActivity : AppCompatActivity() {
         // Test connessione TCP+mTLS con il Raspberry
         btnTestConnection.setOnClickListener {
             if (!ShadowClient.isConfigured(this)) {
-                toast("Configura prima l'IP del server")
+                toast(R.string.toast_configure_server_first)
                 return@setOnClickListener
             }
-            tvStatus.text = "🔄 Test connessione in corso..."
+            tvStatus.setText(R.string.status_testing_connection)
             btnTestConnection.isEnabled = false
 
             ShadowClient.testConnection(this) { success, message ->
@@ -291,20 +291,14 @@ class MainActivity : AppCompatActivity() {
             return
         }
         AlertDialog.Builder(this)
-            .setTitle("🔔  Notifiche (1/3)")
-            .setMessage(
-                "ShadowFS usa le notifiche per avvisarti:\n\n" +
-                "• Upload e download in corso\n" +
-                "• Raspberry non raggiungibile\n" +
-                "• File ripristinati con successo\n\n" +
-                "Premi Consenti nella finestra che apparirà."
-            )
-            .setPositiveButton("Consenti") { _, _ ->
+            .setTitle(R.string.onboarding_notifications_title)
+            .setMessage(R.string.onboarding_notifications_message)
+            .setPositiveButton(R.string.button_allow) { _, _ ->
                 ActivityCompat.requestPermissions(
                     this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIFICATIONS
                 )
             }
-            .setNegativeButton("Salta") { _, _ -> advanceOnboarding() }
+            .setNegativeButton(R.string.button_skip) { _, _ -> advanceOnboarding() }
             .setCancelable(false)
             .show()
     }
@@ -317,16 +311,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
         AlertDialog.Builder(this)
-            .setTitle("📁  Accesso ai file (2/3)")
-            .setMessage(
-                "ShadowFS ha bisogno di accedere a TUTTI i file per ghostare " +
-                "e ripristinare foto, video e documenti.\n\n" +
-                "Nelle impostazioni che si apriranno:\n" +
-                "  1. Trova ShadowFS nella lista\n" +
-                "  2. Attiva \"Consenti accesso a tutti i file\"\n" +
-                "  3. Torna qui"
-            )
-            .setPositiveButton("Apri Impostazioni") { _, _ ->
+            .setTitle(R.string.onboarding_storage_title)
+            .setMessage(R.string.onboarding_storage_message)
+            .setPositiveButton(R.string.button_open_settings) { _, _ ->
                 waitingForSettings = true
                 try {
                     startActivity(
@@ -337,7 +324,7 @@ class MainActivity : AppCompatActivity() {
                     startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
                 }
             }
-            .setNegativeButton("Salta") { _, _ -> advanceOnboarding() }
+            .setNegativeButton(R.string.button_skip) { _, _ -> advanceOnboarding() }
             .setCancelable(false)
             .show()
     }
@@ -351,17 +338,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
         AlertDialog.Builder(this)
-            .setTitle("🔋  Batteria (3/3)")
-            .setMessage(
-                "Per ghostare i file in background senza interruzioni, ShadowFS " +
-                "deve essere escluso dall'ottimizzazione batteria " +
-                "(altrimenti Android lo sospende dopo pochi minuti).\n\n" +
-                "Nelle impostazioni:\n" +
-                "  1. Trova ShadowFS\n" +
-                "  2. Seleziona \"Non ottimizzare\" o \"Nessuna restrizione\"\n" +
-                "  3. Torna qui"
-            )
-            .setPositiveButton("Apri Impostazioni") { _, _ ->
+            .setTitle(R.string.onboarding_battery_title)
+            .setMessage(R.string.onboarding_battery_message)
+            .setPositiveButton(R.string.button_open_settings) { _, _ ->
                 waitingForSettings = true
                 try {
                     startActivity(
@@ -376,7 +355,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-            .setNegativeButton("Salta") { _, _ -> advanceOnboarding() }
+            .setNegativeButton(R.string.button_skip) { _, _ -> advanceOnboarding() }
             .setCancelable(false)
             .show()
     }
@@ -391,28 +370,28 @@ class MainActivity : AppCompatActivity() {
         }.toTypedArray()
 
         AlertDialog.Builder(this)
-            .setTitle("Cartelle Protette")
-            .setMessage(if (allPinned.isEmpty()) "Nessuna cartella protetta.\nI file 🔒 sono predefiniti e non rimovibili." else null)
+            .setTitle(R.string.pinned_folders_title)
+            .setMessage(if (allPinned.isEmpty()) getString(R.string.pinned_folders_empty) else null)
             .setItems(items) { _, index ->
                 val path = allPinned[index]
                 if (defaultPinned.contains(path)) {
-                    toast("Le cartelle 🔒 predefinite non possono essere rimosse")
+                    toast(R.string.toast_default_pinned_cannot_remove)
                 } else {
                     AlertDialog.Builder(this)
-                        .setTitle("Rimuovi cartella")
-                        .setMessage("Rimuovere dalla protezione?\n$path")
-                        .setPositiveButton("Rimuovi") { _, _ ->
+                        .setTitle(R.string.remove_folder_title)
+                        .setMessage(getString(R.string.remove_folder_message, path))
+                        .setPositiveButton(R.string.button_remove) { _, _ ->
                             ShadowClient.removePinnedFolder(this, path)
-                            toast("✅ Cartella rimossa dalla protezione")
+                            toast(R.string.toast_folder_removed)
                         }
-                        .setNegativeButton("Annulla", null)
+                        .setNegativeButton(R.string.button_cancel, null)
                         .show()
                 }
             }
-            .setPositiveButton("➕ Aggiungi") { _, _ ->
+            .setPositiveButton(R.string.button_add) { _, _ ->
                 showAddPinnedFolderDialog()
             }
-            .setNegativeButton("Chiudi", null)
+            .setNegativeButton(R.string.button_close, null)
             .show()
     }
 
@@ -422,23 +401,23 @@ class MainActivity : AppCompatActivity() {
             setPadding(48, 24, 48, 24)
         }
         AlertDialog.Builder(this)
-            .setTitle("Aggiungi Cartella Protetta")
-            .setMessage("Inserisci il percorso completo da proteggere (i file al suo interno non verranno mai ghostati).")
+            .setTitle(R.string.add_pinned_folder_title)
+            .setMessage(R.string.add_pinned_folder_message)
             .setView(input)
-            .setPositiveButton("Aggiungi") { _, _ ->
+            .setPositiveButton(R.string.button_add) { _, _ ->
                 val path = input.text.toString().trim()
                 if (path.isEmpty()) {
-                    toast("Percorso vuoto")
+                    toast(R.string.toast_empty_path)
                     return@setPositiveButton
                 }
                 if (!path.startsWith("/storage/emulated/0/")) {
-                    toast("Il percorso deve iniziare con /storage/emulated/0/")
+                    toast(R.string.toast_path_must_start)
                     return@setPositiveButton
                 }
                 ShadowClient.addPinnedFolder(this, path)
-                toast("📌 Cartella protetta: $path")
+                toast(R.string.toast_folder_protected, path)
             }
-            .setNegativeButton("Annulla", null)
+            .setNegativeButton(R.string.button_cancel, null)
             .show()
     }
 
@@ -458,13 +437,13 @@ class MainActivity : AppCompatActivity() {
         val freePercent = if (total > 0) (usable.toDouble() / total * 100).toInt() else 0
         val usableGB = usable / (1024.0 * 1024 * 1024)
         val totalGB = total / (1024.0 * 1024 * 1024)
-        tvSpace.text = "💾 Spazio: %.1f GB liberi / %.1f GB totali (%d%%)".format(usableGB, totalGB, freePercent)
+        tvSpace.text = getString(R.string.storage_space_status, usableGB, totalGB, freePercent)
 
         // Permesso
         val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             Environment.isExternalStorageManager()
         } else { true }
-        btnPermission.text = if (hasPermission) "✅ Permesso concesso" else "⚠️ Richiedi permesso Gestione File"
+        btnPermission.text = getString(if (hasPermission) R.string.button_file_permission_granted else R.string.button_file_permission_request)
         btnPermission.isEnabled = !hasPermission
 
         // Battery optimization
@@ -472,20 +451,20 @@ class MainActivity : AppCompatActivity() {
         val batteryOptDisabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
             pm.isIgnoringBatteryOptimizations(packageName)
         btnBatteryOpt.text = if (batteryOptDisabled)
-            "✅ Ottimizzazione batteria disattivata"
+            getString(R.string.button_battery_optimization_disabled)
         else
-            "🔋 Disattiva Ottimizzazione Batteria"
+            getString(R.string.button_battery_optimization_disable)
         btnBatteryOpt.isEnabled = !batteryOptDisabled
 
         // Certificati
         val certsOk = ShadowClient.areCertsPresent(this)
-        tvCertStatus.text = if (certsOk) "🔒 Certificati trovati nello storage privato dell'app" else "❌ Certificati mancanti"
-        tvCertPath.text = "Percorso: ${ShadowClient.getCertsDisplayPath(this)}"
+        tvCertStatus.text = getString(if (certsOk) R.string.certificates_found else R.string.certificates_missing)
+        tvCertPath.text = getString(R.string.certificates_path, ShadowClient.getCertsDisplayPath(this))
         tvCertPath.visibility = if (!certsOk) View.VISIBLE else View.GONE
 
         // Servizio
         val running = isServiceRunning()
-        btnStartService.text = if (running) "⏹ Ferma Shadow Daemon" else "▶ Avvia Shadow Daemon"
+        btnStartService.text = getString(if (running) R.string.button_stop_daemon else R.string.button_start_daemon)
         btnForceOffload.isEnabled = running && hasPermission && certsOk && ShadowClient.isConfigured(this)
 
         // Lista file ghostati
@@ -493,15 +472,15 @@ class MainActivity : AppCompatActivity() {
 
         // Stato generale
         if (!ShadowClient.isConfigured(this)) {
-            tvStatus.text = "⚙️ Configura l'IP del Raspberry Pi per iniziare"
+            tvStatus.setText(R.string.status_configure_server)
         } else if (!certsOk) {
-            tvStatus.text = "⚙️ Copia i certificati in Download/shadowfs_certs/"
+            tvStatus.setText(R.string.status_copy_certs)
         } else if (!hasPermission) {
-            tvStatus.text = "⚙️ Concedi il permesso \"Gestione file\""
+            tvStatus.setText(R.string.status_grant_file_permission)
         } else if (running) {
-            tvStatus.text = "🟢 Shadow Daemon attivo — memoria sotto controllo"
+            tvStatus.setText(R.string.status_daemon_running)
         } else {
-            tvStatus.text = "⏸ Daemon non avviato — premi Avvia per proteggere la memoria"
+            tvStatus.setText(R.string.status_daemon_stopped)
         }
     }
 
@@ -509,15 +488,15 @@ class MainActivity : AppCompatActivity() {
     private fun startMdnsDiscovery() {
         stopMdnsDiscovery()
         btnDiscover.isEnabled = false
-        btnDiscover.text = "🔍 Ricerca..."
-        tvStatus.text = "🔄 Cerco il Raspberry in rete..."
+        btnDiscover.setText(R.string.button_discover_searching)
+        tvStatus.setText(R.string.status_searching_raspberry)
 
         nsdManager = getSystemService(Context.NSD_SERVICE) as NsdManager
 
         val resolveListener = object : NsdManager.ResolveListener {
             override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
                 runOnUiThread {
-                    tvStatus.text = "❌ Raspberry trovato ma indirizzo non risolvibile"
+                    tvStatus.setText(R.string.status_raspberry_unresolvable)
                     resetDiscoverButton()
                 }
             }
@@ -529,8 +508,8 @@ class MainActivity : AppCompatActivity() {
                     etServerIp.setText(host)
                     etServerPort.setText(port.toString())
                     ShadowClient.saveConfig(this@MainActivity, host, port)
-                    toast("✅ Raspberry trovato: $host:$port")
-                    tvStatus.text = "✅ Raspberry trovato automaticamente: $host"
+                    toast(R.string.toast_raspberry_found, host, port)
+                    tvStatus.text = getString(R.string.status_raspberry_found, host)
                     resetDiscoverButton()
                     refreshUI()
                 }
@@ -541,7 +520,7 @@ class MainActivity : AppCompatActivity() {
         discoveryListener = object : NsdManager.DiscoveryListener {
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
                 runOnUiThread {
-                    tvStatus.text = "❌ Impossibile avviare la ricerca mDNS (errore $errorCode)"
+                    tvStatus.text = getString(R.string.status_mdns_failed, errorCode)
                     resetDiscoverButton()
                 }
             }
@@ -561,7 +540,7 @@ class MainActivity : AppCompatActivity() {
         btnDiscover.postDelayed({
             if (!btnDiscover.isEnabled) {
                 stopMdnsDiscovery()
-                tvStatus.text = "⚠️ Nessun Raspberry trovato in rete. Inserisci l'IP manualmente."
+                tvStatus.setText(R.string.status_no_raspberry_found)
                 resetDiscoverButton()
             }
         }, 10_000)
@@ -576,7 +555,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun resetDiscoverButton() {
         btnDiscover.isEnabled = true
-        btnDiscover.text = "🔍 Cerca in Wi-Fi"
+        btnDiscover.setText(R.string.button_discover_wifi)
     }
 
     override fun onDestroy() {
@@ -597,12 +576,12 @@ class MainActivity : AppCompatActivity() {
      */
     private fun showCloudBackupWarning() {
         val knownCloudApps = listOf(
-            Triple("Google Photos",   "com.google.android.apps.photos", "Backup e sincronizzazione"),
-            Triple("Xiaomi Gallery",  "com.miui.gallery",               "Backup cloud MIUI"),
+            Triple("Google Photos",   "com.google.android.apps.photos", getString(R.string.cloud_setting_backup_sync)),
+            Triple("Xiaomi Gallery",  "com.miui.gallery",               getString(R.string.cloud_setting_miui_backup)),
             Triple("Samsung Gallery", "com.sec.android.gallery3d",      "Samsung Cloud"),
-            Triple("OneDrive",        "com.microsoft.skydrive",         "Caricamento automatico fotocamera"),
-            Triple("Dropbox",         "com.dropbox.android",            "Caricamento automatico fotocamera"),
-            Triple("Amazon Photos",   "com.amazon.clouddrive.photos",   "Auto-salvataggio foto"),
+            Triple("OneDrive",        "com.microsoft.skydrive",         getString(R.string.cloud_setting_camera_upload)),
+            Triple("Dropbox",         "com.dropbox.android",            getString(R.string.cloud_setting_camera_upload)),
+            Triple("Amazon Photos",   "com.amazon.clouddrive.photos",   getString(R.string.cloud_setting_photo_auto_save)),
         )
 
         val installed = knownCloudApps.filter { (_, pkg, _) ->
@@ -610,26 +589,25 @@ class MainActivity : AppCompatActivity() {
         }
 
         val message = buildString {
-            append("ShadowFS gestisce autonomamente i tuoi file.\n\n")
-            append("⚠️  Per evitare conflitti, disattiva il backup automatico delle foto nelle app cloud:\n\n")
+            append(getString(R.string.cloud_backup_intro))
             if (installed.isEmpty()) {
-                append("Nessuna app cloud rilevata — sei a posto!")
+                append(getString(R.string.cloud_backup_none_detected))
             } else {
                 installed.forEach { (name, _, setting) ->
                     append("• $name  →  $setting\n")
                 }
-                append("\nPuoi farlo ora dalle impostazioni di ogni app.")
+                append(getString(R.string.cloud_backup_settings_suffix))
             }
         }
 
         val builder = AlertDialog.Builder(this)
-            .setTitle("☁️  Backup cloud")
+            .setTitle(R.string.cloud_backup_title)
             .setMessage(message)
-            .setNegativeButton("Ho capito") { _, _ -> advanceOnboarding() }
+            .setNegativeButton(R.string.button_i_understand) { _, _ -> advanceOnboarding() }
             .setCancelable(false)
 
         if (installed.isNotEmpty()) {
-            builder.setPositiveButton("Apri ${installed.first().first}") { _, _ ->
+            builder.setPositiveButton(getString(R.string.button_open_app, installed.first().first)) { _, _ ->
                 openAppSettings(installed.first().second)
                 advanceOnboarding()
             }
@@ -645,7 +623,7 @@ class MainActivity : AppCompatActivity() {
             }
             startActivity(intent)
         } catch (_: Exception) {
-            toast("Apri manualmente le impostazioni di $packageName")
+            toast(R.string.toast_open_app_settings_manually, packageName)
         }
     }
 
@@ -668,10 +646,10 @@ class MainActivity : AppCompatActivity() {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 if (shadowFiles.isEmpty()) {
                     tvGhostSummary.text = ""
-                    btnGhostList.text = "👻 Vedi File Ghostati"
+                    btnGhostList.setText(R.string.button_ghost_list)
                 } else {
-                    btnGhostList.text = "👻 Vedi File Ghostati (${shadowFiles.size})"
-                    tvGhostSummary.text = "Spazio recuperato: ${formatSize(totalRecovered)}"
+                    btnGhostList.text = getString(R.string.button_ghost_list_count, shadowFiles.size)
+                    tvGhostSummary.text = getString(R.string.ghost_summary_recovered, formatSize(totalRecovered))
                 }
             }
         }.start()
@@ -697,4 +675,6 @@ class MainActivity : AppCompatActivity() {
     private fun isServiceRunning(): Boolean = ShadowForegroundService.isRunning
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    private fun toast(resId: Int, vararg args: Any) =
+        Toast.makeText(this, getString(resId, *args), Toast.LENGTH_SHORT).show()
 }

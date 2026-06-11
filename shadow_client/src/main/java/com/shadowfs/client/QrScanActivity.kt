@@ -33,7 +33,7 @@ class QrScanActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_qr_scan)
 
-        supportActionBar?.title = "Scansiona QR di Pairing"
+        supportActionBar?.title = getString(R.string.qr_scan_title)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
         previewView  = findViewById(R.id.preview_view)
@@ -53,7 +53,7 @@ class QrScanActivity : AppCompatActivity() {
         if (requestCode == 100 && results.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
             startCamera()
         } else {
-            Toast.makeText(this, "Permesso fotocamera necessario", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, R.string.camera_permission_required, Toast.LENGTH_LONG).show()
             finish()
         }
     }
@@ -102,7 +102,7 @@ class QrScanActivity : AppCompatActivity() {
         if (alreadyProcessed) return
         alreadyProcessed = true
 
-        runOnUiThread { tvScanStatus.text = "🔄 QR rilevato — configurazione in corso..." }
+        runOnUiThread { tvScanStatus.setText(R.string.qr_status_detected) }
 
         // Esegui il parsing in background (può richiedere una chiamata HTTP)
         cameraExecutor.execute {
@@ -112,9 +112,9 @@ class QrScanActivity : AppCompatActivity() {
                     val url = URL(raw)
                     val host = url.host
                     if (!isLocalOrTailscaleHost(host)) {
-                        throw SecurityException("URL non valido: '$host' non è un IP locale o Tailscale.\nIl QR deve provenire dal tuo Raspberry Pi.")
+                        throw SecurityException(getString(R.string.qr_invalid_url, host))
                     }
-                    runOnUiThread { tvScanStatus.text = "🌐 Scarico configurazione da Raspberry..." }
+                    runOnUiThread { tvScanStatus.setText(R.string.qr_downloading_config) }
                     val conn = url.openConnection() as HttpURLConnection
                     conn.connectTimeout = 8_000
                     conn.readTimeout = 8_000
@@ -122,7 +122,7 @@ class QrScanActivity : AppCompatActivity() {
                     try {
                         conn.connect()
                         if (conn.responseCode != 200) {
-                            throw Exception("Errore server: HTTP ${conn.responseCode}")
+                            throw Exception(getString(R.string.qr_server_error, conn.responseCode))
                         }
                         conn.inputStream.bufferedReader(Charsets.UTF_8).readText()
                     } finally {
@@ -174,8 +174,8 @@ class QrScanActivity : AppCompatActivity() {
         ShadowClient.saveConfig(this, ip, port)
 
         runOnUiThread {
-            tvScanStatus.text = "✅ Configurazione completata!"
-            Toast.makeText(this, "✅ Pairing completato con $ip:$port", Toast.LENGTH_LONG).show()
+            tvScanStatus.setText(R.string.qr_config_complete)
+            Toast.makeText(this, getString(R.string.qr_pairing_complete, ip, port), Toast.LENGTH_LONG).show()
         }
 
         // Torna alla MainActivity dopo 1.5s

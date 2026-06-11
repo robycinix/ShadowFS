@@ -290,12 +290,10 @@ class ShadowForegroundService : Service() {
     } catch (e: Exception) { emptyMap() }
 
     private fun notifyContestedFile(fileName: String) {
-        val text = "'$fileName' viene continuamente ripristinato da un'app di backup cloud " +
-            "(Google Photos? Amazon Photos?). ShadowFS non lo ghosterà più per evitare un loop. " +
-            "Per liberare spazio: disattiva il backup cloud per quella cartella."
+        val text = getString(R.string.notif_contested_text, fileName)
         val notif = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
-            .setContentTitle("ShadowFS — Conflitto con app cloud")
+            .setContentTitle(getString(R.string.notif_contested_title))
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -388,7 +386,7 @@ class ShadowForegroundService : Service() {
         val progress = if (total > 0) ((transferred * 100) / total).toInt() else 0
         val notif = NotificationCompat.Builder(this, CHANNEL_TRANSFER_ID)
             .setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setContentTitle("ShadowFS — Upload in corso")
+            .setContentTitle(getString(R.string.notif_upload_title))
             .setContentText("$fileName  ${formatSize(transferred)} / ${formatSize(total)}")
             .setProgress(100, progress, false)
             .setOngoing(true)
@@ -416,8 +414,8 @@ class ShadowForegroundService : Service() {
 
         val notif = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle("ShadowFS — Raspberry irraggiungibile")
-            .setContentText("Impossibile ghostare i file. Controlla che il Raspberry sia acceso e connesso.")
+            .setContentTitle(getString(R.string.notif_unreachable_title))
+            .setContentText(getString(R.string.notif_unreachable_text))
             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()
@@ -430,7 +428,7 @@ class ShadowForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Shadow Daemon Core",
+                getString(R.string.service_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             )
             getSystemService(NotificationManager::class.java)
@@ -442,7 +440,7 @@ class ShadowForegroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_TRANSFER_ID,
-                "ShadowFS Trasferimenti",
+                getString(R.string.transfer_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply { setShowBadge(false) }
             getSystemService(NotificationManager::class.java)
@@ -451,8 +449,8 @@ class ShadowForegroundService : Service() {
     }
 
     private fun createNotification() = NotificationCompat.Builder(this, CHANNEL_ID)
-        .setContentTitle("ShadowFS Attivo")
-        .setContentText("Memoria ottimizzata in background")
+        .setContentTitle(getString(R.string.notif_service_title))
+        .setContentText(getString(R.string.notif_service_text))
         .setSmallIcon(android.R.drawable.sym_def_app_icon)
         .setPriority(NotificationCompat.PRIORITY_LOW)
         .build()

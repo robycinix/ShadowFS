@@ -22,7 +22,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="📷 Inquadra il QR Code mostrato dal Raspberry Pi"
+            android:text="@string/qr_scan_instruction"
             android:textColor="#E0E0FF"
             android:textSize="15sp"
             android:gravity="center"
@@ -32,7 +32,7 @@
             android:id="@+id/tv_scan_status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="In attesa del QR..."
+            android:text="@string/qr_scan_waiting"
             android:textColor="#8080A0"
             android:textSize="13sp"
             android:gravity="center"/>

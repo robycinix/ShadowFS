@@ -15,7 +15,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="👻 ShadowFS"
+            android:text="@string/main_title"
             android:textColor="#E0E0FF"
             android:textSize="30sp"
             android:textStyle="bold"
@@ -26,7 +26,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="File Ghosting Intelligente"
+            android:text="@string/main_tagline"
             android:textColor="#8080A0"
             android:textSize="14sp"
             android:gravity="center"
@@ -37,7 +37,7 @@
             android:id="@+id/tv_status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="⚙️ Configura l'IP del Raspberry Pi per iniziare"
+            android:text="@string/status_configure_server"
             android:textColor="#A0B0FF"
             android:textSize="14sp"
             android:gravity="center"
@@ -50,7 +50,7 @@
             android:id="@+id/tv_space"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="💾 Caricamento..."
+            android:text="@string/loading"
             android:textColor="#80C0A0"
             android:textSize="13sp"
             android:gravity="center"
@@ -64,7 +64,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🌐 RASPBERRY PI (SERVER)"
+            android:text="@string/section_server"
             android:textColor="#8080FF"
             android:textSize="11sp"
             android:textStyle="bold"
@@ -82,7 +82,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="3"
-                android:hint="IP server (es. 100.80.33.12)"
+                android:hint="@string/server_ip_hint"
                 android:inputType="text"
                 android:textColor="#E0E0FF"
                 android:textColorHint="#505065"
@@ -95,7 +95,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:hint="Porta"
+                android:hint="@string/server_port_hint"
                 android:text="4243"
                 android:inputType="number"
                 android:textColor="#E0E0FF"
@@ -115,7 +115,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="💾 Salva"
+                android:text="@string/button_save"
                 android:backgroundTint="#2A3A6A"
                 android:textColor="#A0B8FF"
                 android:layout_marginEnd="8dp"/>
@@ -125,7 +125,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="🔍 Cerca in Wi-Fi"
+                android:text="@string/button_discover_wifi"
                 android:backgroundTint="#1A3A3A"
                 android:textColor="#60D0D0"/>
         </LinearLayout>
@@ -134,7 +134,7 @@
             android:id="@+id/btn_test_connection"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🔌 Testa Connessione mTLS"
+            android:text="@string/button_test_connection"
             android:backgroundTint="#1A3A2A"
             android:textColor="#80D0A0"
             android:layout_marginBottom="8dp" />
@@ -143,7 +143,7 @@
             android:id="@+id/btn_qr_scan"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="📷 Pairing via QR Code"
+            android:text="@string/button_qr_pairing"
             android:backgroundTint="#2A1A3A"
             android:textColor="#C080FF"
             android:layout_marginBottom="16dp" />
@@ -156,7 +156,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🔒 CERTIFICATI mTLS"
+            android:text="@string/section_certificates"
             android:textColor="#8080FF"
             android:textSize="11sp"
             android:textStyle="bold"
@@ -167,7 +167,7 @@
             android:id="@+id/tv_cert_status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="❌ Certificati mancanti"
+            android:text="@string/certificates_missing"
             android:textColor="#FF8080"
             android:textSize="13sp"
             android:paddingBottom="4dp"/>
@@ -189,7 +189,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="📁 PERMESSI"
+            android:text="@string/section_permissions"
             android:textColor="#8080FF"
             android:textSize="11sp"
             android:textStyle="bold"
@@ -200,7 +200,7 @@
             android:id="@+id/btn_permission"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="⚠️ Richiedi Permesso Gestione File"
+            android:text="@string/button_file_permission_request"
             android:backgroundTint="#3A2A1A"
             android:textColor="#FFB060"
             android:layout_marginBottom="8dp" />
@@ -209,7 +209,7 @@
             android:id="@+id/btn_battery_opt"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🔋 Disattiva Ottimizzazione Batteria"
+            android:text="@string/button_battery_optimization_disable"
             android:backgroundTint="#3A2A1A"
             android:textColor="#FFB060"
             android:layout_marginBottom="16dp" />
@@ -222,7 +222,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="⚙️ CONTROLLO DAEMON"
+            android:text="@string/section_daemon_control"
             android:textColor="#8080FF"
             android:textSize="11sp"
             android:textStyle="bold"
@@ -233,7 +233,7 @@
             android:id="@+id/btn_start_service"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="▶ Avvia Shadow Daemon"
+            android:text="@string/button_start_daemon"
             android:backgroundTint="#1A3A1A"
             android:textColor="#80E080"
             android:layout_marginBottom="8dp" />
@@ -242,7 +242,7 @@
             android:id="@+id/btn_force_offload"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="⚡ Libera Spazio Adesso (Forza Ghosting)"
+            android:text="@string/button_force_offload"
             android:backgroundTint="#3A1A1A"
             android:textColor="#FF8080"
             android:enabled="false"
@@ -253,7 +253,7 @@
             android:id="@+id/switch_auto_hydration"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="💧 Idratazione automatica (riscarica i file quando li apri)"
+            android:text="@string/switch_auto_hydration"
             android:textColor="#C0C0E0"
             android:textSize="14sp"
             android:paddingTop="8dp"
@@ -269,7 +269,7 @@
             android:id="@+id/btn_ghost_list"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="👻 Vedi File Ghostati"
+            android:text="@string/button_ghost_list"
             android:backgroundTint="#1A1A3A"
             android:textColor="#8080FF"
             android:layout_marginBottom="8dp"/>
@@ -279,7 +279,7 @@
             android:id="@+id/btn_pinned_folders"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="📌 Cartelle Protette (mai ghostate)"
+            android:text="@string/button_pinned_folders"
             android:backgroundTint="#1A2A1A"
             android:textColor="#80C080"
             android:layout_marginBottom="16dp"/>
@@ -299,7 +299,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="ℹ️  Il daemon monitora la memoria ogni ora. Quando lo spazio scende sotto il 15%, i file inattivi da più di 3 giorni vengono automaticamente 'ghostati' sul Raspberry Pi."
+            android:text="@string/main_footer_info"
             android:textColor="#505060"
             android:textSize="11sp"
             android:gravity="center"
