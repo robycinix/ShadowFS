@@ -1,185 +1,188 @@
-# ShadowFS - Valutazione logica app Android
+# ShadowFS - Android App Logic Audit
 
-Obiettivo: ridurre rumore, superfici inutili e complessita' prima di rendere
-stabile il deploy su telefono reale.
+Goal: reduce noise, unnecessary surfaces, and complexity before stabilizing
+real-device deployment.
 
-## Sintesi
+## Summary
 
-L'app Android contiene molte funzioni utili, ma oggi e' ancora una combinazione
-di prodotto finale, pannello debug e onboarding tecnico. La cosa da evitare e'
-tagliare feature vive prima del test reale: upload/download atomico, hydration,
-pairing QR, servizio foreground e pinned folders hanno senso nel modello attuale.
+The Android app contains several useful features, but it is still a mix of final
+product, debug panel, and technical onboarding. The main risk is removing live
+features before real Android + Raspberry Pi testing. Atomic upload/download,
+hydration, QR pairing, the foreground service, and protected folders all fit the
+current product model.
 
-La pulizia migliore e' procedere in due fasi:
+The best cleanup path has two phases:
 
-1. rimuovere subito cio' che e' certamente morto;
-2. dopo il test Android + Raspberry, semplificare la UI e lasciare solo i flussi
-   realmente usati.
+1. remove anything that is certainly dead;
+2. after Android + Raspberry Pi field testing, simplify the UI around the flows
+   that are actually used.
 
-## Eliminato subito
+## Already Removed
 
 - `shadow_client/src/main/res/icon_shadowfs.png`
 
-Motivo: asset PNG da circa 9 MB, non referenziato da manifest, layout o codice.
-Gli launcher icon effettivi sono in `res/mipmap-*`. Tenere quel file aumentava
-peso del repo/APK debug senza dare valore.
+Reason: unused PNG asset of roughly 9 MB. It was not referenced by the manifest,
+layouts, or code. The active launcher icons live in `res/mipmap-*`. Keeping it
+increased repository and debug APK weight without value.
 
-## Da mantenere per ora
+## Keep for Now
 
 ### `ShadowForegroundService`
 
-Serve davvero: e' il cuore del comportamento background. Gestisce:
+This is required. It is the core background behavior and handles:
 
-- scansione spazio;
-- ghosting automatico/forzato;
-- retry upload;
-- re-ghosting dopo idratazione;
-- notifiche di trasferimento;
-- avvio di `HydrationManager`.
+- storage scanning;
+- automatic and forced ghosting;
+- upload retry;
+- re-ghosting after hydration;
+- transfer notifications;
+- startup of `HydrationManager`.
 
-Non va eliminato. Semmai, in futuro, va diviso in classi piu' piccole.
+Do not remove it. In the future, it should probably be split into smaller
+classes.
 
 ### `HydrationManager`
 
-Serve davvero: intercetta accessi ai ghost e richiama download atomico. E' una
-parte delicata del valore dell'app.
+This is required. It observes ghost file access and calls the atomic download
+path. It is a delicate part of the app value.
 
-Da tenere, ma da testare bene con Galleria/Google Photos per capire se il rate
-limiter e' troppo aggressivo o troppo permissivo.
+Keep it, but test it carefully with Gallery and Google Photos to verify whether
+the rate limiter is too aggressive or too permissive.
 
 ### `VfsManager`
 
-Serve davvero: crea il ghost locale, gestisce thumbnail e `IS_PENDING`. E' una
-parte rischiosa ma necessaria se vuoi evitare che Gallery/Photos vedano file
-parziali o thumbnail durante la sostituzione.
+This is required. It creates the local ghost, manages thumbnails, and sets
+`IS_PENDING`. It is risky code, but necessary to avoid Gallery or Photos seeing
+partial files during replacement.
 
-Non eliminare prima del test reale.
+Do not remove it before real-device testing.
 
-### Pairing QR
+### QR Pairing
 
-Ha senso mantenerlo: riduce errori manuali su IP, porta e certificati. In piu'
-il server ha gia' `pairing.go`, quindi non e' codice isolato lato Android.
+Keep it. It reduces manual mistakes with IP, port, and certificates. The daemon
+has `pairing.go`, and the Android app has `QrScanActivity`, so this is a complete
+cross-device flow rather than isolated Android-only code.
 
-Da rivalutare solo se vuoi una versione ultra-minimale senza onboarding.
+QR pairing should remain the primary setup path.
 
-## Candidati a semplificazione dopo il test reale
+### mDNS Discovery
 
-### Home troppo tecnica
+Keep it for now. `MainActivity` discovers `_shadowfs._tcp`, and
+`install_raspberry.sh` installs `avahi-daemon` and publishes the same service on
+port `4243`.
 
-`activity_main.xml` espone molte azioni:
+The feature is coherent with the installer. It still needs real-device testing
+on home routers, guest networks, and Tailscale-only scenarios.
 
-- salva IP;
-- cerca in Wi-Fi;
-- testa connessione;
-- pairing QR;
-- permessi;
-- batteria;
-- avvio/stop daemon;
+## Candidates for Simplification After Field Testing
+
+### Home Screen Is Too Technical
+
+`activity_main.xml` exposes many actions:
+
+- save IP;
+- search Wi-Fi;
+- test connection;
+- QR pairing;
+- permissions;
+- battery exemption;
+- start/stop daemon;
 - force offload;
-- lista ghost;
-- cartelle protette.
+- ghost list;
+- protected folders.
 
-Per una versione stabile conviene separare:
+For a stable app, split this into:
 
-- schermata principale: stato, spazio, avvia/ferma, lista ghost;
-- schermata setup: IP, porta, pairing QR, certificati, permessi;
-- schermata avanzata/debug: test connessione, force offload, mDNS.
+- main screen: status, storage, start/stop, ghost list;
+- setup screen: QR pairing, IP, port, certificates, permissions;
+- advanced/debug screen: connection test, force offload, mDNS details.
 
-Questo riduce il rischio che l'utente prema azioni tecniche fuori contesto.
+This reduces the chance that users tap technical actions out of context.
 
 ### `btn_force_offload`
 
-Utile per test e manutenzione, ma pericoloso come azione primaria: puo' ghostare
-molti file in una volta. In versione stabile andrebbe spostato in "Avanzate" o
-protetto da conferma.
+Useful for testing and maintenance, but dangerous as a primary action because it
+can ghost many files at once. In a stable version, move it to **Advanced** or
+protect it with a confirmation dialog.
 
-Non eliminarlo ora: serve per testare il sistema.
+Do not remove it yet: it is useful for system testing.
 
-### mDNS "Cerca in Wi-Fi"
+### Cloud Backup Onboarding
 
-Utile se il Raspberry pubblica `_shadowfs._tcp.`. Al momento il daemon ha pairing
-HTTP/QR, ma non ho visto una pubblicazione mDNS nel codice Go. Quindi il pulsante
-puo' risultare spesso inutile.
+The logic is reasonable but heuristic: it checks known package names and shows a
+warning. It is not useless, but it can feel generic or invasive.
 
-Decisione consigliata:
+Keep it for non-technical users, but make the message shorter after field
+testing.
 
-- se vuoi pairing QR come flusso principale, sposta mDNS in avanzate o rimuovilo;
-- se vuoi discovery automatica, aggiungi pubblicazione mDNS lato Raspberry.
+### Ghost Summary With `walkTopDown()`
 
-### Onboarding cloud backup
+`MainActivity.refreshGhostList()` scans all of `/storage/emulated/0` in the
+background to count `.shadow` files. This works, but it can be expensive on full
+phones.
 
-La logica ha senso, ma e' molto euristica: controlla pacchetti noti e mostra un
-warning. Non e' inutile, pero' puo' sembrare invasiva o generica.
+Better option:
 
-Da tenere per utenti non tecnici, ma rendere piu' breve.
+- maintain a persistent counter when ghost/hydration state changes;
+- run a full scan only on the **Ghosted Files** screen.
 
-### Ghost summary con `walkTopDown()`
+## Permissions to Re-evaluate
 
-`MainActivity.refreshGhostList()` scansiona tutto `/storage/emulated/0` in
-background per contare i `.shadow`. Funziona, ma su telefoni pieni puo' essere
-costoso.
+### `READ_EXTERNAL_STORAGE` and `WRITE_EXTERNAL_STORAGE`
 
-Alternativa migliore:
+With modern target SDK and Android 11+, the central permission is
+`MANAGE_EXTERNAL_STORAGE`. `READ_EXTERNAL_STORAGE` and `WRITE_EXTERNAL_STORAGE`
+are legacy.
 
-- aggiornare un contatore persistente quando ghost/idratation cambiano stato;
-- usare la scansione completa solo nella schermata "File Ghostati".
+Do not remove them before testing because `minSdk = 29` includes Android 10,
+where they may still matter. If the project decides to support only Android 11+,
+raise `minSdk` to 30 and remove them.
 
-## Permessi da rivalutare
+### `ACCESS_NETWORK_STATE` and `ACCESS_WIFI_STATE`
 
-### `READ_EXTERNAL_STORAGE` e `WRITE_EXTERNAL_STORAGE`
+The Kotlin code does not directly read Wi-Fi state, but mDNS behavior should be
+tested on real devices before trimming these permissions.
 
-Con target SDK moderno e Android 11+, il permesso centrale e' `MANAGE_EXTERNAL_STORAGE`.
-`READ_EXTERNAL_STORAGE`/`WRITE_EXTERNAL_STORAGE` sono legacy.
-
-Non li eliminerei prima del test su device, perche' `minSdk = 29` include Android
-10, dove possono ancora avere effetto. Se decidi di supportare solo Android 11+,
-puoi rimuoverli e alzare `minSdk` a 30.
-
-### `ACCESS_NETWORK_STATE` e `ACCESS_WIFI_STATE`
-
-Non risultano usati direttamente dal codice Kotlin. `NsdManager` puo' funzionare
-senza che l'app legga esplicitamente lo stato Wi-Fi, ma conviene verificare su
-telefono reale prima di tagliarli.
-
-Se elimini mDNS, questi diventano candidati forti alla rimozione.
+If mDNS is removed later, these become strong removal candidates.
 
 ### `CAMERA`
 
-Serve solo per pairing QR. Se mantieni QR, resta necessario.
+Required only for QR pairing. Keep it as long as QR pairing remains.
 
-## Dipendenze da rivalutare
+## Dependencies to Re-evaluate
 
 ### CameraX + ML Kit
 
-Sono dipendenze pesanti, ma giustificate se il pairing QR e' il flusso consigliato.
+These are heavy dependencies, but justified while QR pairing is the recommended
+setup path.
 
-Rimuoverle solo se decidi di usare esclusivamente configurazione manuale o import
-certificati via file/ADB.
+Remove them only if the app switches to manual configuration or certificate
+import only.
 
 ### ConstraintLayout
 
-I layout attuali sono `LinearLayout`/`ScrollView`; non ho visto uso reale di
-ConstraintLayout.
+Current layouts use `LinearLayout`, `ScrollView`, and `FrameLayout`. The current
+`build.gradle.kts` does not include ConstraintLayout, so there is nothing to
+remove here.
 
-Candidato alla rimozione da `build.gradle.kts`, dopo build di verifica.
+## Do Not Remove Even If They Look Technical
 
-## Cose da non eliminare anche se sembrano "troppo tecniche"
+- `testConnection`: useful for diagnosing certificates and IP before starting
+  the daemon.
+- `pinnedFolders`: prevents ghosting sensitive folders.
+- `.shadowdl.tmp`: required for atomic downloads.
+- `.part`: required for resumable uploads.
+- `.reghost`: required for the re-ghost cycle after hydration.
+- `IS_PENDING`: important for avoiding Gallery/Google Photos conflicts.
 
-- `testConnection`: utile per diagnosticare certificati/IP prima di avviare il daemon.
-- `pinnedFolders`: evita di ghostare cartelle sensibili.
-- `.shadowdl.tmp`: necessario per download atomico.
-- `.part`: necessario per upload resumable.
-- `.reghost`: serve al ciclo di re-ghosting dopo idratazione.
-- `IS_PENDING`: importante per evitare conflitti con Gallery/Google Photos.
+## Recommended Next Cleanup
 
-## Prossima pulizia consigliata
+After real deployment:
 
-Dopo il deploy reale:
-
-1. verificare se pairing QR funziona bene;
-2. se QR funziona, rendere QR il flusso principale e spostare IP manuale in avanzate;
-3. decidere se mDNS serve davvero;
-4. rimuovere `ConstraintLayout` se non usato;
-5. spostare `Force Offload` in una sezione avanzata con conferma;
-6. sostituire il conteggio home con un contatore persistente invece di `walkTopDown()`;
-7. ridurre onboarding e home a pochi stati chiari.
+1. verify QR pairing works reliably;
+2. keep QR as the primary setup path and move manual IP setup to an advanced
+   section;
+3. verify mDNS discovery on real home networks;
+4. move **Force Offload** to an advanced section with confirmation;
+5. replace the home ghost count scan with a persistent counter;
+6. reduce onboarding and home UI to a few clear states.

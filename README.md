@@ -88,7 +88,7 @@ Recommended use today:
 ├── shadow_daemon/          Raspberry Pi daemon, Go + SQLite
 ├── proto/                  future protocol schema
 ├── docs/assets/            README images and diagrams
-├── Manuale_Utente.md       end-user setup and usage guide, Italian
+├── USER_MANUAL.md          end-user setup and usage guide
 ├── DEPLOY_GUIDE.md         deployment guide for Android + Raspberry Pi
 ├── TEST_CHECKLIST.md       real-device validation checklist
 └── ANDROID_APP_AUDIT.md    Android implementation audit notes
@@ -183,7 +183,7 @@ requests to `main`.
 
 ## Documentation
 
-- [User Manual](Manuale_Utente.md)
+- [User Manual](USER_MANUAL.md)
 - [Deployment Guide](DEPLOY_GUIDE.md)
 - [Real-Device Test Checklist](TEST_CHECKLIST.md)
 - [Security Policy](SECURITY.md)

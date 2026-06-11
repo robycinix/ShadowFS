@@ -1,128 +1,123 @@
-# ShadowFS - Guida deploy Raspberry + Android
+# ShadowFS Deployment Guide - Raspberry Pi + Android
 
-Questa guida porta Raspberry Pi e smartphone alla stessa versione del codice
-presente in questo repository.
+This guide brings the Raspberry Pi daemon and Android app to the same version
+from this repository.
 
-Importante: app Android e daemon Raspberry vanno aggiornati insieme. Il protocollo
-upload/download e' cambiato: se aggiorni solo uno dei due, i trasferimenti possono
-fallire.
+Important: update the Android app and Raspberry Pi daemon together. The
+upload/download protocol is shared; if only one side is updated, transfers can
+fail.
 
-## 0. Situazione attesa
+## 0. Expected Starting Point
 
-Sul PC Windows hai il repository aggiornato:
+On the Windows PC, use the repository root:
 
 ```powershell
 cd C:\Users\rober\Desktop\shadowsfs\ShadowFS
 git log -1 --oneline
-```
-
-Output atteso:
-
-```text
-0fe4272 chore: stabilize ShadowFS baseline
-```
-
-Controlla che non ci siano modifiche locali:
-
-```powershell
 git status --short
 ```
 
-Output atteso: nessuna riga.
+Expected `git status --short` output: no lines.
 
-## 1. Preparare l'APK Android
+## 1. Build or Install the Android App
 
-### Opzione A - Da Android Studio
+### Option A - Android Studio
 
-1. Apri Android Studio.
-2. Seleziona `File > Open`.
-3. Apri la cartella:
+1. Open Android Studio.
+2. Select `File > Open`.
+3. Open this folder:
 
 ```text
 C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client
 ```
 
-4. Aspetta la sincronizzazione Gradle.
-5. Collega lo smartphone via USB.
-6. Attiva sul telefono:
-   - Opzioni sviluppatore
-   - Debug USB
-   - Autorizza il PC quando compare il popup RSA
-7. In Android Studio seleziona il device reale.
-8. Premi `Run`.
+4. Wait for Gradle sync.
+5. Connect a real Android phone over USB.
+6. Enable on the phone:
+   - Developer options
+   - USB debugging
+   - RSA authorization for this PC when prompted
+7. Select the real device in Android Studio.
+8. Press `Run`.
 
-Cosa aspettarsi:
+Expected result:
 
-- Android Studio compila l'app.
-- Installa l'APK sul telefono.
-- L'app si apre automaticamente.
-- Se l'app era gia' installata, viene aggiornata mantenendo dati e preferenze.
+- Android Studio builds the app.
+- The APK is installed on the phone.
+- The app opens automatically.
+- If the app was already installed, it is updated while preserving app data and
+  preferences.
 
-### Opzione B - Da terminale PowerShell
+### Option B - PowerShell
 
-Compila l'APK debug:
+Build the debug APK:
 
 ```powershell
 cd C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client
 .\gradlew.bat assembleDebug
 ```
 
-Output atteso:
+Expected output:
 
 ```text
 BUILD SUCCESSFUL
 ```
 
-APK generato:
+Generated APK:
 
 ```text
 C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\build\outputs\apk\debug\shadow_client-debug.apk
 ```
 
-Verifica che `adb` veda il telefono:
+Verify that `adb` sees the phone:
 
 ```powershell
 adb devices
 ```
 
-Output atteso:
+Expected output:
 
 ```text
 List of devices attached
 XXXXXXXX	device
 ```
 
-Installa l'APK:
+Install the APK:
 
 ```powershell
 adb install -r C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\build\outputs\apk\debug\shadow_client-debug.apk
 ```
 
-Output atteso:
+Expected output:
 
 ```text
 Success
 ```
 
-Se `adb` non e' nel PATH, usa quello incluso nell'SDK Android. Di solito si trova qui:
+If `adb` is not in `PATH`, use the copy from the Android SDK:
 
 ```powershell
 & "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" devices
 & "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install -r C:\Users\rober\Desktop\shadowsfs\ShadowFS\shadow_client\build\outputs\apk\debug\shadow_client-debug.apk
 ```
 
-## 2. Aggiornare i certificati sul telefono
+## 2. Certificates on the Phone
 
-La nuova app migra i certificati dalla cartella pubblica legacy allo storage
-privato dell'app.
+The Android app can be configured in two ways:
 
-Cartella legacy attesa sul telefono:
+- recommended: scan the one-time pairing QR code printed by the daemon;
+- manual fallback: copy certificates to the legacy public folder.
+
+The app migrates certificates from the public legacy folder to private app
+storage on first use.
+
+Legacy folder expected on the phone:
 
 ```text
 /storage/emulated/0/Download/shadowfs_certs/
 ```
 
-Deve contenere:
+It must contain:
 
 ```text
 ca.crt
@@ -130,181 +125,183 @@ client.crt
 client.key
 ```
 
-Verifica da PowerShell:
+Verify from PowerShell:
 
 ```powershell
 adb shell ls -l /storage/emulated/0/Download/shadowfs_certs
 ```
 
-Output atteso: i tre file sopra.
+Expected output: the three files listed above.
 
-Apri l'app almeno una volta dopo l'installazione. Cosa aspettarsi:
+Open the app at least once after installation. Expected behavior:
 
-- l'app copia i certificati nello storage privato;
-- la cartella legacy resta sul telefono;
-- se i certificati sono validi, lo stato certificati nell'app deve risultare OK.
+- the app copies certificates to private storage;
+- the legacy folder remains on the phone;
+- if certificates are valid, the certificate status in the app is OK.
 
-Se mancano i certificati, copiarli di nuovo:
+If certificates are missing, copy them again:
 
 ```powershell
 adb shell mkdir -p /storage/emulated/0/Download/shadowfs_certs
-adb push C:\percorso\certs_for_android\ca.crt /storage/emulated/0/Download/shadowfs_certs/ca.crt
-adb push C:\percorso\certs_for_android\client.crt /storage/emulated/0/Download/shadowfs_certs/client.crt
-adb push C:\percorso\certs_for_android\client.key /storage/emulated/0/Download/shadowfs_certs/client.key
+adb push C:\path\to\certs_for_android\ca.crt /storage/emulated/0/Download/shadowfs_certs/ca.crt
+adb push C:\path\to\certs_for_android\client.crt /storage/emulated/0/Download/shadowfs_certs/client.crt
+adb push C:\path\to\certs_for_android\client.key /storage/emulated/0/Download/shadowfs_certs/client.key
 ```
 
-Sostituisci `C:\percorso\certs_for_android` con il percorso reale dei certificati
-generati dal Raspberry.
+Replace `C:\path\to\certs_for_android` with the actual certificate folder copied
+from the Raspberry Pi, usually `/opt/shadowfs/certs_for_android`.
 
-## 3. Preparare il Raspberry
+## 3. Prepare the Raspberry Pi
 
-Entra sul Raspberry:
+SSH into the Raspberry Pi:
 
 ```powershell
-ssh pi@IP_DEL_RASPBERRY
+ssh pi@RASPBERRY_IP
 ```
 
-Oppure, se usi un altro utente:
+Or, if you use another user:
 
 ```powershell
-ssh NOME_UTENTE@IP_DEL_RASPBERRY
+ssh USERNAME@RASPBERRY_IP
 ```
 
-Cosa aspettarsi:
+Expected shell:
 
 ```text
 pi@raspberrypi:~ $
 ```
 
-Ferma il servizio attuale prima di sostituire il binario:
+Stop the current service before replacing the binary:
 
 ```bash
 sudo systemctl stop shadowfs
 sudo systemctl status shadowfs --no-pager
 ```
 
-Output atteso: servizio `inactive` oppure `deactivated`.
+Expected service state: `inactive` or `deactivated`.
 
-## 4. Copiare il codice daemon sul Raspberry
+## 4. Copy the Daemon Source to the Raspberry Pi
 
-Dal PC Windows, in PowerShell, copia la cartella `shadow_daemon`.
+From Windows PowerShell, copy the `shadow_daemon` folder.
 
-Esempio con `scp`:
+Example with `scp`:
 
 ```powershell
 cd C:\Users\rober\Desktop\shadowsfs\ShadowFS
-scp -r .\shadow_daemon pi@IP_DEL_RASPBERRY:/home/pi/ShadowFS_shadow_daemon_new
+scp -r .\shadow_daemon pi@RASPBERRY_IP:/home/pi/ShadowFS_shadow_daemon_new
 ```
 
-Cosa aspettarsi:
+Expected result:
 
-- vengono copiati i file `.go`, script e risorse del daemon;
-- non devono essere copiati file Android.
+- Go files, scripts, `go.mod`, and `go.sum` are copied;
+- Android files are not copied.
 
-Se il tuo utente non e' `pi`, cambia il comando:
+If your Raspberry Pi user is not `pi`, adjust the destination:
 
 ```powershell
-scp -r .\shadow_daemon NOME_UTENTE@IP_DEL_RASPBERRY:/home/NOME_UTENTE/ShadowFS_shadow_daemon_new
+scp -r .\shadow_daemon USERNAME@RASPBERRY_IP:/home/USERNAME/ShadowFS_shadow_daemon_new
 ```
 
-## 5. Compilare il daemon sul Raspberry
+## 5. Build the Daemon on the Raspberry Pi
 
-Sul Raspberry:
+On the Raspberry Pi:
 
 ```bash
 cd /home/pi/ShadowFS_shadow_daemon_new
 go version
 ```
 
-Output atteso:
+Expected output:
 
 ```text
 go version ...
 ```
 
-Se `go` non esiste:
+If `go` is missing:
 
 ```bash
 sudo apt update
 sudo apt install -y golang
 ```
 
-Poi compila:
+Build the binary. The project service installed by `install_raspberry.sh` expects
+the binary name `shadowdaemon`:
 
 ```bash
 cd /home/pi/ShadowFS_shadow_daemon_new
 go mod tidy
-go build -o shadow_daemon .
+go build -o shadowdaemon .
 ```
 
-Output atteso: nessun errore e nuovo file `shadow_daemon`.
+Expected result: no errors and a new `shadowdaemon` file.
 
-Verifica:
+Verify:
 
 ```bash
-ls -lh shadow_daemon
+ls -lh shadowdaemon
 ```
 
-Output atteso:
+Expected output:
 
 ```text
--rwxr-xr-x ... shadow_daemon
+-rwxr-xr-x ... shadowdaemon
 ```
 
-## 6. Installare il nuovo binario
+## 6. Install the New Binary
 
-Prima trova dove si trova il daemon attuale:
+Find the current service definition:
 
 ```bash
 systemctl cat shadowfs
 ```
 
-Cerca la riga `ExecStart=`.
+Look for `ExecStart=`.
 
-Esempio:
+Typical installer output:
 
 ```text
-ExecStart=/opt/shadowfs/shadow_daemon ...
+ExecStart=/opt/shadowfs/shadowdaemon -storage /storage/shadow_root -tcp-addr 0.0.0.0:4243 -pairing-addr 0.0.0.0:4244
 ```
 
-Fai backup del binario attuale:
+Back up the current binary:
 
 ```bash
-sudo cp /opt/shadowfs/shadow_daemon /opt/shadowfs/shadow_daemon.backup.$(date +%Y%m%d-%H%M%S)
+sudo cp /opt/shadowfs/shadowdaemon /opt/shadowfs/shadowdaemon.backup.$(date +%Y%m%d-%H%M%S)
 ```
 
-Copia il nuovo binario:
+Copy the new binary:
 
 ```bash
-sudo cp /home/pi/ShadowFS_shadow_daemon_new/shadow_daemon /opt/shadowfs/shadow_daemon
-sudo chmod +x /opt/shadowfs/shadow_daemon
+sudo cp /home/pi/ShadowFS_shadow_daemon_new/shadowdaemon /opt/shadowfs/shadowdaemon
+sudo chmod +x /opt/shadowfs/shadowdaemon
 ```
 
-Se il tuo `ExecStart` usa un percorso diverso, sostituisci `/opt/shadowfs/shadow_daemon`
-con quel percorso.
+If your `ExecStart` uses a different path, replace `/opt/shadowfs/shadowdaemon`
+with that path.
 
-## 7. Verificare configurazione e certificati Raspberry
+## 7. Verify Raspberry Pi Configuration and Certificates
 
-Controlla la definizione del servizio:
+Check the service definition:
 
 ```bash
 systemctl cat shadowfs
 ```
 
-Annota:
+Note:
 
-- porta TCP, di solito `4243`;
-- storage path;
-- percorso database;
-- percorso certificati.
+- TCP port, usually `4243`;
+- HTTP pairing port, usually `4244`;
+- storage path, usually `/storage/shadow_root`;
+- database path;
+- certificate path.
 
-Controlla che i certificati esistano:
+Check server certificates:
 
 ```bash
 ls -l /opt/shadowfs/certs
 ```
 
-Output atteso, nomi simili:
+Expected names:
 
 ```text
 ca.crt
@@ -314,12 +311,27 @@ client.crt
 client.key
 ```
 
-Se l'app Android si connette usando un IP diverso da quello presente nei SAN del
-certificato server, rigenera i certificati con l'IP corretto prima di testare.
+Check Android client certificates:
 
-## 8. Riavviare il servizio
+```bash
+ls -l /opt/shadowfs/certs_for_android
+```
 
-Sul Raspberry:
+Expected names:
+
+```text
+ca.crt
+client.crt
+client.key
+```
+
+If the Android app connects through an IP address that is not present in the
+server certificate SANs, regenerate certificates with the correct IP before
+testing.
+
+## 8. Restart the Service
+
+On the Raspberry Pi:
 
 ```bash
 sudo systemctl daemon-reload
@@ -327,41 +339,47 @@ sudo systemctl start shadowfs
 sudo systemctl status shadowfs --no-pager
 ```
 
-Output atteso:
+Expected output:
 
 ```text
 Active: active (running)
 ```
 
-Leggi i log in tempo reale:
+Read logs live:
 
 ```bash
 journalctl -u shadowfs -f
 ```
 
-Tienilo aperto durante i test dallo smartphone.
+Keep this open while testing from the phone. On startup, the daemon prints the
+temporary pairing URL and QR code. The token is valid for 5 minutes and can be
+used once.
 
-## 9. Configurare/verificare l'app Android
+## 9. Verify Android App Configuration
 
-Apri ShadowFS sul telefono.
+Open ShadowFS on the phone.
 
-Controlla:
+Check:
 
-- IP server corretto;
-- porta corretta, di solito `4243`;
-- certificati presenti;
-- permesso storage completo;
-- esenzione batteria/Doze concessa se l'app la richiede.
+- server IP is correct;
+- port is correct, usually `4243`;
+- certificates are present;
+- all-files storage permission is granted;
+- battery/Doze exemption is granted if requested.
 
-Se usi Tailscale, l'IP nell'app deve essere quello Tailscale del Raspberry, e il
-certificato server deve includere quell'IP nei SAN.
+If you use Tailscale, the app should use the Raspberry Pi Tailscale IP, and the
+server certificate must include that IP in its SAN list.
 
-## 10. Test rapido di connessione
+If the phone and Raspberry Pi are on the same Wi-Fi network, **Search Wi-Fi**
+uses mDNS service `_shadowfs._tcp`. The installer configures this through
+`avahi-daemon`.
 
-Dal telefono, prova una funzione che contatti il daemon, per esempio lista ghost,
-sync o upload di un file piccolo.
+## 10. Quick Connection Test
 
-Sul Raspberry, nei log, dovresti vedere righe simili:
+On the phone, run a feature that contacts the daemon, such as connection test,
+sync, ghost list, restore, or a small upload.
+
+On the Raspberry Pi, logs should show lines similar to:
 
 ```text
 [TCP] Connessione da ...
@@ -370,78 +388,78 @@ Sul Raspberry, nei log, dovresti vedere righe simili:
 [SyncIndex] ...
 ```
 
-Se vedi errori TLS:
+If you see TLS errors:
 
-- `bad certificate`: certificato client non compatibile con la CA del server;
-- `certificate is not valid for any names`: IP/hostname usato dall'app non e' nei SAN;
-- timeout: IP/porta/firewall/Tailscale non raggiungibile.
+- `bad certificate`: the client certificate is not compatible with the server CA;
+- `certificate is not valid for any names`: the app IP/hostname is not in SANs;
+- timeout: IP, port, firewall, or Tailscale is unreachable.
 
-## 11. Test funzionali minimi
+## 11. Minimum Functional Tests
 
-Usa anche `TEST_CHECKLIST.md`, ma come smoke test iniziale fai questo:
+Use `TEST_CHECKLIST.md` for the full pass. For an initial smoke test:
 
-1. Upload file piccolo.
-   - Atteso: file presente sul Raspberry.
-   - Atteso: log `[Upload] File salvato`.
+1. Upload a small file.
+   - Expected: file present on the Raspberry Pi.
+   - Expected: upload log confirms the file was saved.
 
-2. Download/idratrazione dello stesso file.
-   - Atteso: ghost sostituito solo a download completo.
-   - Atteso: nessun file corrotto se la rete cade.
+2. Restore or hydrate the same file.
+   - Expected: the ghost is replaced only after a complete verified download.
+   - Expected: no corrupted file if the network drops.
 
-3. Upload file grande.
-   - Atteso: progresso visibile.
-   - Atteso: file `.part` solo durante/interruzione upload.
+3. Upload a large file.
+   - Expected: progress is visible.
+   - Expected: `.part` exists only during an interrupted upload.
 
-4. Interrompi la rete durante upload grande.
-   - Atteso: `.part` resta sul Raspberry.
-   - Atteso: secondo tentativo riprende.
+4. Interrupt the network during a large upload.
+   - Expected: `.part` remains on the Raspberry Pi.
+   - Expected: the second attempt resumes.
 
-5. Interrompi la rete durante download grande.
-   - Atteso: ghost locale resta intatto.
-   - Atteso: `.shadowdl.tmp` resta come temporaneo.
-   - Atteso: secondo tentativo riprende e poi sostituisce il ghost.
+5. Interrupt the network during a large download.
+   - Expected: the local ghost remains intact.
+   - Expected: `.shadowdl.tmp` remains as a temporary file.
+   - Expected: the second attempt resumes, verifies, then replaces the ghost.
 
-## 12. Comandi utili per debug
+## 12. Useful Debug Commands
 
-Log daemon:
+Daemon logs:
 
 ```bash
 journalctl -u shadowfs -n 100 --no-pager
 journalctl -u shadowfs -f
 ```
 
-Stato daemon:
+Daemon status:
 
 ```bash
 sudo systemctl status shadowfs --no-pager
 ```
 
-Riavvio daemon:
+Daemon restart:
 
 ```bash
 sudo systemctl restart shadowfs
 ```
 
-Log Android via adb:
+Android logs through adb:
 
 ```powershell
 adb logcat | findstr ShadowFS
 ```
 
-Oppure piu' specifico:
+More specific:
 
 ```powershell
 adb logcat | findstr ShadowClient
 ```
 
-Verifica APK installato:
+Verify installed APK version:
 
 ```powershell
 adb shell dumpsys package com.shadowfs.client | findstr version
 ```
 
-Pulire temporanei download Android, solo se sei sicuro che nessun download sia in
-corso:
+List temporary Android download files. Remove them only if you are certain no
+download is in progress:
 
 ```powershell
 adb shell find /storage/emulated/0 -name "*.shadowdl.tmp"
@@ -449,32 +467,31 @@ adb shell find /storage/emulated/0 -name "*.shadowdl.tmp"
 
 ## 13. Rollback
 
-Se la nuova versione non parte sul Raspberry:
+If the new daemon does not start on the Raspberry Pi:
 
 ```bash
 sudo systemctl stop shadowfs
-ls -lh /opt/shadowfs/shadow_daemon.backup.*
-sudo cp /opt/shadowfs/shadow_daemon.backup.YYYYMMDD-HHMMSS /opt/shadowfs/shadow_daemon
-sudo chmod +x /opt/shadowfs/shadow_daemon
+ls -lh /opt/shadowfs/shadowdaemon.backup.*
+sudo cp /opt/shadowfs/shadowdaemon.backup.YYYYMMDD-HHMMSS /opt/shadowfs/shadowdaemon
+sudo chmod +x /opt/shadowfs/shadowdaemon
 sudo systemctl start shadowfs
 sudo systemctl status shadowfs --no-pager
 ```
 
-Sostituisci `YYYYMMDD-HHMMSS` con il backup reale.
+Replace `YYYYMMDD-HHMMSS` with the real backup timestamp.
 
-Per Android, da Android Studio puoi reinstallare una build precedente se hai ancora
-l'APK. In alternativa ricompila/installa la versione precedente dal commit Git
-desiderato.
+For Android, reinstall a previous APK from Android Studio if you still have it.
+Alternatively, build and install the desired previous Git commit.
 
-## 14. Esito finale atteso
+## 14. Expected Final State
 
-Alla fine devono essere veri tutti questi punti:
+All of these should be true:
 
-- Raspberry esegue il nuovo `shadow_daemon`.
-- Smartphone ha la nuova app installata.
-- Certificati migrati nello storage privato dell'app.
-- Upload piccolo funziona.
-- Download piccolo funziona.
-- File grande riprende dopo interruzione upload.
-- File grande riprende dopo interruzione download.
-- Il ghost locale non viene mai sostituito da un file troncato.
+- Raspberry Pi runs the new `shadowdaemon`.
+- Phone has the new ShadowFS app installed.
+- Certificates are migrated to the app private storage.
+- Small upload works.
+- Small download works.
+- Large upload resumes after interruption.
+- Large download resumes after interruption.
+- The local ghost is never replaced by a truncated file.
