@@ -140,9 +140,23 @@ class ShadowForegroundService : Service() {
             }
         }
 
+        // --- RICONCILIAZIONE ANTI-LOOP CLOUD ---
+        // Google Photos, Amazon Photos & co. possono "ripristinare" l'originale
+        // sopra un ghost (riscaricandolo dal loro cloud quando notano il contenuto
+        // cambiato/mancante). Il file torna grande ma il marker .shadow resta.
+        // Senza gestione si innesca una reazione a catena:
+        //   ghost → l'app cloud ripristina → ghost → ripristina → ... (∞ traffico)
+        // Strategia:
+        //   1° ripristino: re-ghost "economico" — se il contenuto è identico a
+        //      quello già sul Raspberry (checksum nel marker), NESSUN upload;
+        //   2° ripristino: file CONTESO → escluso per sempre dal ghosting +
+        //      notifica all'utente di disattivare il backup cloud per la cartella.
+        reconcileRestoredGhosts(root)
+
         // Avvia il ghosting se lo spazio è sotto il 15% OPPURE se forzato dall'utente
         if (force || freePercentage < 15.0) {
             val thresholdTime = System.currentTimeMillis() - (3L * 24 * 60 * 60 * 1000) // 3 giorni fa
+            val contested = ShadowClient.getContestedFiles(this)
 
             root.walkTopDown()
                 .onEnter { dir ->
@@ -155,6 +169,7 @@ class ShadowForegroundService : Service() {
                     IGNORED_EXTENSIONS.none { file.name.endsWith(it) } &&
                     IGNORED_PREFIXES.none { file.name.startsWith(it) } &&
                     !File(file.parentFile, file.name + ".shadow").exists() &&
+                    !contested.contains(file.absolutePath) &&
                     file.length() > MIN_FILE_SIZE_BYTES &&
                     (force || file.lastModified() < thresholdTime)
                 }
@@ -205,6 +220,92 @@ class ShadowForegroundService : Service() {
     }
 
     // ----------------------------------------------------------------
+    // Riconciliazione ghost ripristinati da app cloud
+    // ----------------------------------------------------------------
+
+    /** Soglia di ripristini esterni oltre la quale il file è considerato conteso. */
+    private val MAX_EXTERNAL_RESTORES = 2
+
+    private fun reconcileRestoredGhosts(root: File) {
+        val contested = ShadowClient.getContestedFiles(this)
+
+        root.walkTopDown()
+            .onEnter { dir -> pinnedFolders().none { p -> dir.absolutePath.startsWith(p) } }
+            .filter { it.isFile && it.name.endsWith(".shadow") }
+            .forEach { marker ->
+                try {
+                    val original = File(marker.parentFile, marker.name.removeSuffix(".shadow"))
+                    val meta = readShadowMeta(marker)
+                    val origSize = meta["originalSize"]?.toLongOrNull() ?: return@forEach
+                    if (origSize <= 0L || !original.exists()) return@forEach
+                    // È ancora un ghost (thumbnail/0 byte)? Nulla da fare.
+                    if (original.length() < origSize) return@forEach
+                    if (contested.contains(original.absolutePath)) return@forEach
+
+                    val restoredCount = (meta["restoredCount"]?.toIntOrNull() ?: 0) + 1
+                    val relPath = original.absolutePath.removePrefix(monitoredDir).trimStart('/')
+
+                    if (restoredCount >= MAX_EXTERNAL_RESTORES) {
+                        // Un'app esterna insiste a ripristinare questo file:
+                        // continuare a ghostarlo significherebbe loop infinito.
+                        ShadowClient.addContestedFile(this, original.absolutePath)
+                        marker.delete()
+                        File(original.parentFile, original.name + ".reghost").delete()
+                        notifyContestedFile(original.name)
+                        android.util.Log.w("ShadowFS",
+                            "⚠️ File conteso da un'app cloud — escluso dal ghosting: $relPath")
+                        return@forEach
+                    }
+
+                    android.util.Log.i("ShadowFS",
+                        "Ghost ripristinato da app esterna ($restoredCount° volta): $relPath")
+
+                    val storedChecksum = meta["checksum"]
+                    val currentSha = ShadowClient.sha256Bytes(original)
+                    val currentHex = currentSha.joinToString("") { "%02x".format(it) }
+
+                    hydrationManager.suppressHydration(original.absolutePath)
+                    if (storedChecksum != null && storedChecksum.equals(currentHex, ignoreCase = true)) {
+                        // Contenuto identico a quello già sul Raspberry: re-ghost
+                        // locale immediato, ZERO traffico di rete.
+                        vfsManager.markAsGhost(this, original, currentHex, restoredCount)
+                        android.util.Log.i("ShadowFS", "Re-ghost senza upload (checksum identico): $relPath")
+                    } else {
+                        // Contenuto diverso (o marker legacy senza checksum):
+                        // serve un upload aggiornato prima di ri-ghostare.
+                        uploadFile(original, relPath, isRetry = false,
+                            restoredCount = restoredCount, precomputedSha = currentSha)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("ShadowFS", "Errore riconciliazione ghost: ${e.message}")
+                }
+            }
+    }
+
+    private fun readShadowMeta(marker: File): Map<String, String> = try {
+        marker.readLines().mapNotNull { line ->
+            val i = line.indexOf('=')
+            if (i > 0) line.substring(0, i) to line.substring(i + 1) else null
+        }.toMap()
+    } catch (e: Exception) { emptyMap() }
+
+    private fun notifyContestedFile(fileName: String) {
+        val text = "'$fileName' viene continuamente ripristinato da un'app di backup cloud " +
+            "(Google Photos? Amazon Photos?). ShadowFS non lo ghosterà più per evitare un loop. " +
+            "Per liberare spazio: disattiva il backup cloud per quella cartella."
+        val notif = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
+            .setContentTitle("ShadowFS — Conflitto con app cloud")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+        getSystemService(NotificationManager::class.java)
+            .notify(("contested:$fileName").hashCode(), notif)
+    }
+
+    // ----------------------------------------------------------------
     // Upload con progress bar e retry automatico
     // ----------------------------------------------------------------
 
@@ -212,12 +313,19 @@ class ShadowForegroundService : Service() {
         file: File,
         relPath: String,
         isRetry: Boolean,
+        restoredCount: Int = 0,
+        precomputedSha: ByteArray? = null,
         onDone: ((Boolean) -> Unit)? = null
     ) {
-        if (File(file.parentFile, file.name + ".shadow").exists()) {
+        // restoredCount > 0 = riconciliazione di un ghost ripristinato da un'app
+        // cloud: il marker .shadow esiste ancora ma il file è tornato completo,
+        // quindi il controllo "già ghostato" va saltato.
+        if (restoredCount == 0 && File(file.parentFile, file.name + ".shadow").exists()) {
             android.util.Log.i("ShadowFS", "Skip upload: file già ghostato: $relPath")
             removeFromRetryQueue(relPath)
-            onDone?.invoke(false)
+            // true: il file è già in stato ghost — i chiamanti (es. re-ghosting)
+            // possono ripulire i loro marker invece di riprovare per sempre.
+            onDone?.invoke(true)
             return
         }
         if (file.name.startsWith(".pending-")) {
@@ -237,19 +345,34 @@ class ShadowForegroundService : Service() {
         val showProgress = fileSize > 5 * 1024 * 1024 // progress solo per file > 5 MB
         activeUploads.incrementAndGet()
 
+        // Snapshot pre-upload: se il file cambia DURANTE l'upload (es. foto modificata
+        // dall'utente), sul server è finita la versione vecchia. Ghostare adesso
+        // distruggerebbe la versione nuova → in quel caso si salta il ghosting e si
+        // lascia il file in coda per un upload aggiornato al prossimo ciclo.
+        val sizeBeforeUpload = fileSize
+        val mtimeBeforeUpload = file.lastModified()
+
         ShadowClient.upload(
             context = this,
             file = file,
             relPath = relPath,
             onProgress = if (showProgress) { transferred, total ->
                 updateTransferNotification(file.name, transferred, total)
-            } else null
-        ) { success ->
+            } else null,
+            precomputedSha = precomputedSha
+        ) { success, checksumHex ->
             activeUploads.decrementAndGet()
             if (activeUploads.get() == 0) dismissTransferNotification()
 
             if (success) {
-                vfsManager.markAsGhost(this, file)
+                if (file.length() != sizeBeforeUpload || file.lastModified() != mtimeBeforeUpload) {
+                    android.util.Log.w("ShadowFS",
+                        "File modificato durante l'upload — ghosting annullato, riproverò: $relPath")
+                    addToRetryQueue(relPath)
+                    onDone?.invoke(false)
+                    return@upload
+                }
+                vfsManager.markAsGhost(this, file, checksumHex, restoredCount)
                 removeFromRetryQueue(relPath)
                 if (isRetry) android.util.Log.i("ShadowFS", "✅ Retry riuscito: $relPath")
             } else {

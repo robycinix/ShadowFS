@@ -246,7 +246,19 @@
             android:backgroundTint="#3A1A1A"
             android:textColor="#FF8080"
             android:enabled="false"
-            android:layout_marginBottom="24dp" />
+            android:layout_marginBottom="8dp" />
+
+        <!-- Idratazione automatica all'apertura dei file ghost -->
+        <Switch
+            android:id="@+id/switch_auto_hydration"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="💧 Idratazione automatica (riscarica i file quando li apri)"
+            android:textColor="#C0C0E0"
+            android:textSize="14sp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:layout_marginBottom="16dp" />
 
         <!-- Divider -->
         <View android:layout_width="match_parent" android:layout_height="1dp"

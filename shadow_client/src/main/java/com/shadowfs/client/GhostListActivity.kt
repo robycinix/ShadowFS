@@ -298,14 +298,20 @@ class GhostListActivity : AppCompatActivity() {
 
         Thread {
             val root = File(Environment.getExternalStorageDirectory().absolutePath)
+            // File "presenti" sul telefono = ghost (.shadow) + file idratati (.reghost).
+            // Senza i .reghost, un file appena idratato apparirebbe come "orfano"
+            // e l'utente potrebbe eliminarlo dal Raspberry mentre è ancora nel
+            // ciclo di re-ghosting (la copia server è quella che salverà lo spazio).
             val phoneFiles = root.walkTopDown()
-                .filter { isUserVisibleShadow(it) }
-                .map { shadowFile ->
-                    shadowFile.absolutePath
+                .filter { isUserVisibleShadow(it) || isReghostMarker(it) }
+                .map { marker ->
+                    marker.absolutePath
                         .removePrefix(root.absolutePath)
                         .trimStart('/')
                         .removeSuffix(".shadow")
+                        .removeSuffix(".reghost")
                 }
+                .distinct()
                 .toList()
 
             ShadowClient.syncIndex(this, phoneFiles) { orphans ->
@@ -353,6 +359,11 @@ class GhostListActivity : AppCompatActivity() {
         val originalName = file.name.removeSuffix(".shadow")
         return !originalName.startsWith(".pending-")
     }
+
+    /** Marker di un file idratato in attesa di re-ghosting: il file è sul telefono
+     *  E sul Raspberry — non è un orfano. */
+    private fun isReghostMarker(file: File): Boolean =
+        file.isFile && file.name.endsWith(".reghost") && !file.name.startsWith(".pending-")
 
     /** Elimina tutti gli orfani dal Raspberry uno per uno */
     private fun deleteAllOrphans() {

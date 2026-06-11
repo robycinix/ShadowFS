@@ -58,6 +58,31 @@ class HydrationManager(private val context: Context, private val rootDir: String
     private val RATE_THRESHOLD = 3
     @Volatile private var suppressUntil = 0L
 
+    // Budget orario anti-loop cloud: app come Google/Amazon Photos scandiscono i
+    // file e possono superare i filtri (schermo acceso, doppia apertura) innescando
+    // catene idratazione → re-ghost → idratazione. Un tetto massimo di idratazioni
+    // automatiche per ora rende il loop impossibile: oltre il budget, l'idratazione
+    // si mette in pausa fino allo scadere della finestra (il "Ripristina" manuale
+    // nella lista ghost non è soggetto al budget).
+    private val hydrationHistory = mutableListOf<Long>()
+    private val HYDRATION_BUDGET_WINDOW_MS = 60L * 60 * 1000
+    private val HYDRATION_BUDGET_MAX = 15
+    @Volatile private var budgetNotified = false
+
+    private fun hydrationBudgetExceeded(): Boolean {
+        val now = System.currentTimeMillis()
+        synchronized(hydrationHistory) {
+            hydrationHistory.removeAll { it < now - HYDRATION_BUDGET_WINDOW_MS }
+            if (hydrationHistory.size >= HYDRATION_BUDGET_MAX) return true
+            budgetNotified = false
+            return false
+        }
+    }
+
+    private fun recordHydration() {
+        synchronized(hydrationHistory) { hydrationHistory.add(System.currentTimeMillis()) }
+    }
+
     private fun isRateLimited(filePath: String): Boolean {
         val now = System.currentTimeMillis()
 
@@ -157,6 +182,16 @@ class HydrationManager(private val context: Context, private val rootDir: String
 
                         // Debouncer: ignora eventi ripetuti entro 30 secondi
                         if (now - lastRequest > 30_000) {
+                            // Budget orario: blocca i loop innescati dalle app cloud
+                            if (hydrationBudgetExceeded()) {
+                                if (!budgetNotified) {
+                                    budgetNotified = true
+                                    showBudgetExceededNotification()
+                                }
+                                Log.w(TAG, "Budget idratazioni/ora esaurito — pausa: ${file.name}")
+                                return
+                            }
+                            recordHydration()
                             activeHydrations[file.absolutePath] = now
                             triggerHydration(file)
                         }
@@ -290,6 +325,22 @@ class HydrationManager(private val context: Context, private val rootDir: String
             .setAutoCancel(true)
             .build()
         notificationManager.notify(id, notif)
+    }
+
+    private fun showBudgetExceededNotification() {
+        val text = "Troppe idratazioni automatiche nell'ultima ora: probabilmente un'app di " +
+            "backup cloud (Google/Amazon Photos) sta scandendo i file ghost in loop. " +
+            "Idratazione in pausa per un po'. Suggerimento: disattiva il backup cloud " +
+            "per le cartelle gestite da ShadowFS."
+        val notif = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
+            .setContentTitle("ShadowFS — Possibile loop con app cloud")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+        notificationManager.notify(424344, notif)
     }
 
     private fun showFailureNotification(id: Int, fileName: String) {

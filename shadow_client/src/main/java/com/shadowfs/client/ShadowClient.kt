@@ -131,6 +131,33 @@ object ShadowClient {
         return prefs.getStringSet(KEY_PINNED_FOLDERS, emptySet()) ?: emptySet()
     }
 
+    // ----------------------------------------------------------------
+    // File contesi — file che un'app cloud (Google Photos, Amazon Photos...)
+    // continua a ripristinare sopra il ghost. Ghostarli di nuovo innescherebbe
+    // una reazione a catena (ghost → restore → ghost → ...): vengono esclusi
+    // definitivamente dal ghosting finché l'utente non risolve il conflitto
+    // disattivando il backup cloud per quella cartella.
+    // ----------------------------------------------------------------
+
+    private const val KEY_CONTESTED_FILES = "contested_files"
+
+    fun getContestedFiles(context: Context): Set<String> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getStringSet(KEY_CONTESTED_FILES, emptySet()) ?: emptySet()
+    }
+
+    fun addContestedFile(context: Context, path: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val current = prefs.getStringSet(KEY_CONTESTED_FILES, mutableSetOf())?.toMutableSet() ?: mutableSetOf()
+        current.add(path)
+        prefs.edit().putStringSet(KEY_CONTESTED_FILES, current).apply()
+    }
+
+    fun clearContestedFiles(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .remove(KEY_CONTESTED_FILES).apply()
+    }
+
     /**
      * Interrompe il worker thread corrente e ne crea uno nuovo pulito.
      * Va chiamato da ForegroundService.onDestroy() per evitare che il worker
@@ -185,10 +212,15 @@ object ShadowClient {
     /**
      * Invia [file] al daemon con supporto al **resume automatico**.
      *
-     * Protocollo v2 (resume + verifica):
+     * Protocollo v3 (resume + verifica + ACK):
      *   Client → Server: [CMD_UPLOAD][2B path_len][path bytes][8B file_size][32B sha256]
      *   Server → Client: [8B resume_offset]   ← server indica da dove riprendere
      *   Client → Server: [file bytes da resume_offset...]
+     *   Server → Client: [1B ack]             ← 0x01 = verificato e salvato, altro = errore
+     *
+     * CRITICO: il successo viene riportato SOLO dopo l'ACK del server. Senza ACK
+     * il chiamante potrebbe ghostare (troncare) il file locale mentre il server
+     * ha scartato l'upload per checksum mismatch → perdita dati irreversibile.
      *
      * Se un upload precedente era stato interrotto, il server restituisce la dimensione
      * del file parziale già presente su disco: il client salta quei byte e riprende
@@ -204,7 +236,8 @@ object ShadowClient {
         file: File,
         relPath: String,
         onProgress: ((transferred: Long, total: Long) -> Unit)? = null,
-        onResult: (Boolean) -> Unit
+        precomputedSha: ByteArray? = null,
+        onResult: (success: Boolean, sha256Hex: String?) -> Unit
     ) {
         networkExecutor.submit {
             try {
@@ -212,12 +245,14 @@ object ShadowClient {
                 val port = getServerPort(context)
                 if (ip.isEmpty()) {
                     Log.e(TAG, "IP server non configurato.")
-                    onResult(false)
+                    onResult(false, null)
                     return@submit
                 }
 
                 val fileSize = file.length()
-                val checksum = sha256Bytes(file)
+                // Il checksum può arrivare precomputato (es. dalla riconciliazione
+                // dei ghost ripristinati) per evitare di hashare due volte file grandi.
+                val checksum = precomputedSha ?: sha256Bytes(file)
                 Log.i(TAG, "Upload → $ip:$port | $relPath ($fileSize bytes)")
 
                 createSSLSocket(context, ip, port).use { ssl ->
@@ -261,13 +296,22 @@ object ShadowClient {
                         }
                     }
                     dataOut.flush()
+
+                    // ── Fase 4: attendi l'ACK di verifica dal server ───────────────────
+                    // 0x01 = il server ha verificato il checksum e pubblicato il file.
+                    // Qualsiasi altro valore (o EOF) = upload NON valido: il chiamante
+                    // non deve ghostare il file locale.
+                    val ack = inp.read()
+                    if (ack != 1) {
+                        throw IOException("Server ha rifiutato l'upload (ack=$ack) — file locale NON ghostato")
+                    }
                 }
 
-                Log.i(TAG, "✅ Upload completato: $relPath")
-                onResult(true)
+                Log.i(TAG, "✅ Upload completato e verificato dal server: $relPath")
+                onResult(true, checksum.joinToString("") { "%02x".format(it) })
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Upload fallito per '$relPath': ${e.message}", e)
-                onResult(false)
+                onResult(false, null)
             }
         }
     }
@@ -559,7 +603,10 @@ object ShadowClient {
         return socket
     }
 
-    private fun sha256Bytes(file: File): ByteArray {
+    /** SHA-256 di un file, a chunk da 64 KB (non satura la RAM su file grandi).
+     *  Pubblico: usato anche da ForegroundService per la riconciliazione dei
+     *  ghost ripristinati dalle app cloud. */
+    fun sha256Bytes(file: File): ByteArray {
         val digest = MessageDigest.getInstance("SHA-256")
         FileInputStream(file).use { input ->
             val buffer = ByteArray(65536)

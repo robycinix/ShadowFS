@@ -10,7 +10,7 @@ android {
     defaultConfig {
         applicationId = "com.shadowfs.client"
         minSdk = 29
-        targetSdk = 35
+        targetSdk = 34 // deve essere ≤ compileSdk: targetSdk 35 con compileSdk 34 è incoerente
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

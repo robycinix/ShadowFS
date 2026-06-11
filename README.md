@@ -1,218 +1,238 @@
-# ShadowFS — Self-Hosted File Ghosting System
+# ShadowFS
 
-> Libera spazio sul tuo telefono Android inviando i file sul tuo Raspberry Pi di casa, in modo automatico, trasparente e crittografato. Come iCloud, ma tutto tuo.
+[![CI](https://github.com/robycinix/ShadowFS/actions/workflows/ci.yml/badge.svg)](https://github.com/robycinix/ShadowFS/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Android%20%2B%20Raspberry%20Pi-blue)](#architecture)
+[![Status](https://img.shields.io/badge/status-field%20testing-orange)](#project-status)
 
----
+ShadowFS is a self-hosted file ghosting system for Android and Raspberry Pi.
+It frees space on your phone by moving inactive files to your own Raspberry Pi,
+then restores them on demand when you need them again.
 
-## Come funziona
+Think "iCloud storage optimization", but under your control: no subscription, no
+third-party cloud, and mutual TLS between your phone and your Raspberry Pi.
 
-```
-[File > 512KB, non usato da 3 giorni]
-        ↓
-[Android lo invia al Raspberry via TLS 1.3 + mTLS]
-        ↓
-[Android sostituisce il file con un thumbnail (immagini/video)
- o lo tronca a 0 byte (altri tipi) e crea un marker .shadow]
-        ↓
-[Utente apre il file → ShadowFS lo riscarica silenziosamente]
-        ↓
-[Dopo 1 ora → il file viene ri-ghostato automaticamente]
-```
+> The core safety rule: ShadowFS ghosts a local file only after the Raspberry Pi
+> has received it, verified it with SHA-256, and acknowledged the upload.
 
-Il tutto è **trasparente**: la galleria mostra le anteprime, i file sono apribili, lo spazio viene recuperato.
+## Why It Exists
 
----
+Phone storage fills up quietly. Photos, videos, PDFs, downloads and archives sit
+there for months, but deleting them is risky and cloud subscriptions are not for
+everyone.
 
-## Architettura
+ShadowFS keeps the convenient local browsing experience while offloading cold
+files to hardware you own. The Android app keeps lightweight ghost files and
+metadata locally; the daemon stores the original bytes on the Raspberry Pi.
 
-```
-SMARTPHONE ANDROID                    RASPBERRY PI
-══════════════════                    ════════════
+## Highlights
 
-┌─────────────────────┐               ┌──────────────────────┐
-│   App ShadowFS      │  TLS 1.3      │   shadowdaemon (Go)  │
-│   (Kotlin)          │◄─────────────►│   porta 4243         │
-│                     │  mTLS         │                      │
-│  ForegroundService  │               │  Upload / Download   │
-│  HydrationManager   │               │  Delete / SyncIndex  │
-│  ShadowClient       │               │  SQLite DB           │
-│  VfsManager         │               │  /storage/shadow_root│
-└─────────────────────┘               └──────────────────────┘
+- Android client in Kotlin
+- Raspberry Pi daemon in Go
+- TCP + TLS 1.3 with mutual certificate authentication
+- QR-code pairing for first setup
+- Tailscale-friendly networking for access at home or away
+- SHA-256 verification before a local file is ghosted
+- Resumable uploads and downloads for large files
+- Isolated storage per paired device
+- Manual restore list and optional automatic hydration
+- Anti-loop protections for Google Photos, OneDrive, Amazon Photos and similar
+  sync or backup apps
+- SQLite index on the Raspberry Pi
 
-Rete: LAN Wi-Fi (IP locale) oppure ovunque con Tailscale VPN
-```
+## Project Status
 
-### Protocollo binario (TCP stream)
+ShadowFS is currently in field testing. The architecture is usable, but it is
+not yet a polished consumer product and should not be treated as the only copy
+of important data.
 
-| Comando | Byte | Descrizione |
-|---------|------|-------------|
-| Upload   | `0x01` | Android → Raspberry: invia path, dimensione, SHA-256 e contenuto |
-| Download | `0x02` | Android ← Raspberry: scarica dimensione, SHA-256 e contenuto |
-| Delete   | `0x03` | Elimina file dal Raspberry e dal DB |
-| SyncIndex| `0x04` | Confronta indici per trovare orfani |
+Recommended use today:
 
-Upload usa file temporanei `.part`: il daemon pubblica il file finale solo dopo
-aver ricevuto tutti i byte attesi e verificato il checksum SHA-256. Gli upload
-interrotti restano riprendibili senza esporre file incompleti ai download.
+- run it on files you can validate and recover;
+- keep a separate backup for critical data;
+- test upload, restore and delete flows before trusting a folder;
+- avoid mixing ShadowFS with aggressive cloud-sync apps on the same directory
+  unless that directory is explicitly protected.
 
-Download usa file temporanei `.shadowdl.tmp`: l'app sostituisce il ghost locale
-solo dopo aver scaricato tutti i byte attesi e verificato il checksum. Se la rete
-cade durante l'idratazione, il ghost resta intatto e il download può riprendere.
+## Architecture
 
----
+```text
+Android phone                              Raspberry Pi
+-------------                              ------------
 
-## Struttura del Repository
+ShadowFS app                               shadowdaemon
+Kotlin                                     Go
 
-```
-ShadowFS/
-├── README.md                    ← questo file
-├── Manuale_Utente.md            ← guida per l'utente finale
-│
-├── proto/
-│   └── shadow.proto             # Definizione Protobuf (uso futuro)
-│
-├── shadow_daemon/               # Server Go — Raspberry Pi
-│   ├── main.go                  # Entrypoint + flag CLI
-│   ├── server.go                # TCP+TLS server + handler comandi
-│   ├── certs.go                 # Generazione certificati mTLS (PKCS#8)
-│   ├── scanner.go               # Scansione cartelle + SHA-256
-│   ├── db.go                    # SQLite: CRUD + query
-│   ├── go.mod / go.sum          # Dipendenze Go
-│   └── install_raspberry.sh    # Installer automatico
-│
-└── shadow_client/               # App Android — Kotlin
-    ├── build.gradle.kts
-    └── src/main/
-        ├── AndroidManifest.xml
-        └── java/com/shadowfs/client/
-            ├── ShadowClient.kt       # Client TLS+mTLS (upload/download)
-            ├── MainActivity.kt       # UI principale
-            ├── ForegroundService.kt  # Ghosting automatico in background
-            ├── HydrationManager.kt   # FileObserver + idratazione on-demand
-            ├── VfsManager.kt         # Troncamento file + thumbnail
-            ├── GhostListActivity.kt  # Lista file ghostati + garbage collector
-            └── QrScanActivity.kt     # Pairing via QR Code
+ForegroundService                          TCP + TLS 1.3 + mTLS
+HydrationManager             <-------->    Upload / Download / Delete / SyncIndex
+ShadowClient                               SQLite index
+VfsManager                                /storage/shadow_root
 ```
 
----
+Default ports:
 
-## Setup Raspberry Pi
+| Port | Purpose |
+| --- | --- |
+| `4243/tcp` | Android client protocol over TLS + mTLS |
+| `4244/tcp` | temporary HTTP pairing endpoint for QR setup |
+| `4242/udp` | experimental QUIC path, currently parked |
 
-### Prerequisiti
-- Raspberry Pi con Raspberry Pi OS
-- Go 1.21+ (installato automaticamente dallo script)
-- Connessione internet
+## How Ghosting Works
 
-### Installazione
+```text
+1. Android finds a cold file that is large enough to offload.
+2. The file is uploaded to the Raspberry Pi over mTLS.
+3. The daemon verifies the expected SHA-256 checksum.
+4. The daemon sends a final ACK.
+5. Only then does Android replace the local file with a ghost marker or preview.
+6. When restored, Android downloads to a temporary file and swaps it in only
+   after checksum verification succeeds.
+```
+
+Interrupted transfers are designed to be recoverable:
+
+- uploads use `.part` files on the Raspberry Pi;
+- downloads use `.shadowdl.tmp` files on Android;
+- incomplete bytes are not published as final files.
+
+## Repository Layout
+
+```text
+.
+├── shadow_client/          Android app, Kotlin + Gradle
+├── shadow_daemon/          Raspberry Pi daemon, Go + SQLite
+├── proto/                  future protocol schema
+├── Manuale_Utente.md       end-user setup and usage guide, Italian
+├── DEPLOY_GUIDE.md         deployment guide for Android + Raspberry Pi
+├── TEST_CHECKLIST.md       real-device validation checklist
+└── ANDROID_APP_AUDIT.md    Android implementation audit notes
+```
+
+## Quick Start
+
+### Raspberry Pi
 
 ```bash
-cd /home/<utente>/ShadowFS/shadow_daemon
+git clone https://github.com/robycinix/ShadowFS.git
+cd ShadowFS/shadow_daemon
 sudo chmod +x install_raspberry.sh
 sudo ./install_raspberry.sh
 ```
 
-Lo script fa automaticamente:
-1. Installa Go se mancante
-2. Compila il daemon (`go mod tidy && go build`)
-3. Genera i certificati mTLS con IP LAN e Tailscale nel SAN
-4. Installa come servizio systemd (avvio automatico al boot)
-5. Apre la porta 4243 nel firewall
-6. Stampa i comandi per copiare i certificati sul telefono
+The installer:
 
-### Tailscale (raccomandato)
+- installs system dependencies and Go if needed;
+- builds the daemon;
+- creates `/opt/shadowfs` and `/storage/shadow_root`;
+- generates mTLS certificates;
+- installs a `systemd` service;
+- prints pairing information for the Android app.
+
+Check the service:
+
+```bash
+systemctl status shadowfs
+journalctl -fu shadowfs
+```
+
+### Android
+
+1. Open `shadow_client/` in Android Studio.
+2. Let Gradle sync.
+3. Connect a real Android device.
+4. Run the debug build.
+5. Pair the app with the Raspberry Pi by QR code or manual certificate import.
+
+Manual build:
+
+```powershell
+cd shadow_client
+.\gradlew.bat assembleDebug
+```
+
+## Tailscale
+
+ShadowFS works best when the Android device can reach the Raspberry Pi through a
+private network such as Tailscale.
 
 ```bash
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
-tailscale ip -4   # annota questo IP — ti serve nell'app
+tailscale ip -4
 ```
 
-Con Tailscale, ShadowFS funziona sia a casa che da remoto senza configurare porte del router.
-
----
-
-## Setup Android
-
-1. Apri **Android Studio** → **Open** → seleziona `ShadowFS/shadow_client`
-2. Aspetta il Gradle Sync
-3. Collega il telefono via USB con **Debug USB** abilitato
-4. Premi **▶ Run**
-
-### Copia i certificati
+Use the Raspberry Pi Tailscale IP in the Android app, or include it when
+regenerating certificates:
 
 ```bash
-adb push /opt/shadowfs/certs_for_android/ca.crt     /sdcard/Download/shadowfs_certs/ca.crt
-adb push /opt/shadowfs/certs_for_android/client.crt /sdcard/Download/shadowfs_certs/client.crt
-adb push /opt/shadowfs/certs_for_android/client.key /sdcard/Download/shadowfs_certs/client.key
-```
-
-Al primo avvio l'app copia questi file nello storage privato dell'app. La cartella
-`Download/shadowfs_certs/` resta supportata come punto di import manuale.
-
----
-
-## Comandi utili — Raspberry Pi
-
-```bash
-systemctl status shadowfs          # stato del servizio
-journalctl -fu shadowfs            # log in tempo reale
-systemctl restart shadowfs         # riavvio
-
-sqlite3 /opt/shadowfs/shadowfs.db \
-  "SELECT COUNT(*), SUM(size)/1048576 || ' MB' FROM files;"
-
-du -sh /storage/shadow_root/       # spazio usato
-
-# Rigenera certificati (dopo cambio IP)
 sudo ./shadowdaemon --generate-certs \
   --server-ip="$(tailscale ip -4),$(hostname -I | awk '{print $1}')"
-sudo systemctl restart shadowfs
 ```
 
----
+## Documentation
 
-## Comandi utili — Android (ADB)
+- [User Manual](Manuale_Utente.md)
+- [Deployment Guide](DEPLOY_GUIDE.md)
+- [Real-Device Test Checklist](TEST_CHECKLIST.md)
+- [Security Policy](SECURITY.md)
+- [Contributing Guide](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+
+## Development
+
+Run daemon checks:
 
 ```bash
-adb logcat -s ShadowFS ShadowClient HydrationManager VfsManager
-adb shell "find /storage/emulated/0 -name '*.shadow' | wc -l"
-adb shell appops set com.shadowfs.client MANAGE_EXTERNAL_STORAGE allow
-adb shell pm grant com.shadowfs.client android.permission.POST_NOTIFICATIONS
+cd shadow_daemon
+go test ./...
+go vet ./...
 ```
 
----
+Build the Android client:
 
-## Sicurezza
+```powershell
+cd shadow_client
+.\gradlew.bat assembleDebug
+```
 
-- **mTLS bidirezionale**: server e client si autenticano con certificati X.509
-- **TLS 1.3**: crittografia moderna, nessuna versione legacy
-- **CA privata**: certificati generati localmente, non da CA pubbliche
-- **Nessun cloud di terzi**: i dati non escono mai dalla tua rete privata
+The GitHub Actions workflow runs Go checks and an Android debug build on pull
+requests and pushes to `main`.
 
----
+## Security Model
 
-## Troubleshooting
+ShadowFS assumes the Raspberry Pi and Android device are controlled by the same
+person or household.
 
-| Sintomo | Causa | Soluzione |
-|---------|-------|-----------|
-| `Connection refused` | Daemon non avviato | `systemctl start shadowfs` |
-| `PKIX path building failed` | IP non nel certificato SAN | Rigenera certificati con `--server-ip` corretto |
-| `bad certificate` | Client cert non corrisponde alla CA | Rigenera tutti i certificati |
-| `Certificati mancanti` (app) | File non importati nello storage privato | Verifica `Download/shadowfs_certs/` e riapri l'app |
-| File non si tronca | Permesso `MANAGE_EXTERNAL_STORAGE` mancante | Impostazioni → App → ShadowFS → Permessi |
-| Idratazione indesiderata | Galleria in prefetching | Rate limiter attivo — normale |
+- A private CA is generated locally.
+- The daemon requires a valid client certificate.
+- The Android app validates the daemon certificate.
+- Each paired device gets an isolated storage namespace.
+- Pairing tokens are one-time and expire quickly.
 
----
+Do not commit generated certificates, device keys, databases, storage roots or
+logs. The repository `.gitignore` excludes the expected runtime paths.
 
-## Roadmap futura
+## Roadmap
 
-- [ ] QUIC invece di TCP (sperimentale/parcheggiato; TCP+mTLS è il path supportato)
-- [ ] Protobuf per il protocollo (versioning, robustezza)
-- [x] Pinning cartelle dall'UI ✅
-- [x] Battery optimization exemption (Doze mode) ✅
-- [x] Resume upload per file grandi (ripartenza automatica dal byte interrotto) ✅
-- [ ] Backup incrementale (solo diff)
+- [x] TCP + TLS + mTLS Android protocol
+- [x] QR-code pairing
+- [x] Resumable uploads
+- [x] Resumable downloads
+- [x] Per-device storage isolation
+- [x] Manual restore list
+- [x] Anti-loop handling for cloud backup apps
+- [ ] Signed release builds
+- [ ] Automated Android instrumentation tests
+- [ ] Protocol versioning with Protobuf
+- [ ] Optional QUIC transport after the TCP path is fully validated
+- [ ] Incremental backup or block-level dedupe
 
----
+## Contributing
 
-*ShadowFS — perché i tuoi file sono tuoi.*
+Issues, bug reports and focused pull requests are welcome. Please read
+[CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR, especially because this
+project handles local files and data-loss safety matters more than cosmetic speed.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

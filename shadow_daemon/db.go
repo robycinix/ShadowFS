@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"log"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -31,6 +33,14 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	// Migrazione: aggiunge device_id se il DB è già esistente senza di essa (errore ignorato se già presente)
 	db.Exec("ALTER TABLE files ADD COLUMN device_id TEXT NOT NULL DEFAULT 'default'")
 
+	// Migrazione: i DB legacy non hanno il vincolo UNIQUE(device_id, rel_path).
+	// Senza di esso ogni UpdateOrInsertFile fallirebbe con
+	// "ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint",
+	// quindi nessun upload verrebbe mai registrato nel DB.
+	if err := migrateUniqueConstraint(db); err != nil {
+		return nil, err
+	}
+
 	createTableQuery := `
 	CREATE TABLE IF NOT EXISTS files (
 		uuid          TEXT PRIMARY KEY,
@@ -52,6 +62,54 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	}
 
 	return db, nil
+}
+
+// migrateUniqueConstraint ricostruisce la tabella files se esiste ma è priva del
+// vincolo UNIQUE(device_id, rel_path) richiesto dall'upsert ON CONFLICT.
+// In caso di duplicati legacy, vince la riga con last_modified più recente.
+func migrateUniqueConstraint(db *sql.DB) error {
+	var tableSQL string
+	err := db.QueryRow(
+		"SELECT sql FROM sqlite_master WHERE type='table' AND name='files'",
+	).Scan(&tableSQL)
+	if err == sql.ErrNoRows {
+		return nil // tabella non ancora creata: la CREATE successiva avrà già il vincolo
+	}
+	if err != nil {
+		return err
+	}
+	if strings.Contains(strings.ToUpper(strings.ReplaceAll(tableSQL, " ", "")), "UNIQUE(DEVICE_ID,REL_PATH)") {
+		return nil // vincolo già presente
+	}
+
+	log.Printf("🔧 Migrazione DB: aggiungo vincolo UNIQUE(device_id, rel_path) alla tabella files...")
+	migration := `
+	BEGIN;
+	CREATE TABLE files_new (
+		uuid          TEXT PRIMARY KEY,
+		filename      TEXT,
+		device_id     TEXT NOT NULL DEFAULT 'default',
+		rel_path      TEXT,
+		size          INTEGER,
+		status        TEXT,
+		checksum      TEXT,
+		last_modified DATETIME,
+		last_access   DATETIME,
+		UNIQUE(device_id, rel_path)
+	);
+	INSERT OR REPLACE INTO files_new
+		SELECT uuid, filename, device_id, rel_path, size, status, checksum, last_modified, last_access
+		FROM files ORDER BY last_modified ASC;
+	DROP TABLE files;
+	ALTER TABLE files_new RENAME TO files;
+	COMMIT;
+	`
+	if _, err := db.Exec(migration); err != nil {
+		db.Exec("ROLLBACK")
+		return err
+	}
+	log.Printf("✅ Migrazione DB completata.")
+	return nil
 }
 
 // UpdateOrInsertFile inserisce o aggiorna un file nel database.

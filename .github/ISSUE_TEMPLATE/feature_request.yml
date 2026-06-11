@@ -1,0 +1,37 @@
+name: Feature request
+description: Suggest an improvement for ShadowFS
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user pain or operational problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful version of the feature.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Android app
+        - Raspberry Pi daemon
+        - Protocol
+        - Pairing / setup
+        - Documentation
+        - Testing / CI
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and data-safety notes
+      description: Could this affect ghosting, restore, delete, checksums, storage paths or certificates?

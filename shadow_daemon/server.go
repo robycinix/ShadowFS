@@ -16,7 +16,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,9 +23,9 @@ import (
 )
 
 const (
-	ChunkSize       = 4 * 1024 * 1024 // 4 MB
-	MaxConnections  = 50              // max connessioni TCP simultanee
-	MinFreeBytesGB  = 1              // ghosting rifiutato se Raspberry ha meno di 1 GB libero
+	ChunkSize      = 4 * 1024 * 1024 // 4 MB
+	MaxConnections = 50              // max connessioni TCP simultanee
+	MinFreeBytesGB = 1               // ghosting rifiutato se Raspberry ha meno di 1 GB libero
 )
 
 var activeConnections int32 // contatore atomico connessioni attive
@@ -215,9 +214,10 @@ func handleStream(stream quic.Stream, db *sql.DB, storagePath string) {
 // handleUpload: riceve un file da Android, lo salva sul disco e aggiorna il DB.
 //
 // Protocollo resume (v2):
-//   Android → Raspberry: [2B path_len][path bytes][8B file_size][32B sha256]
-//   Raspberry → Android: [8B resume_offset]   ← server dice da dove riprendere
-//   Android → Raspberry: [file bytes da resume_offset...]
+//
+//	Android → Raspberry: [2B path_len][path bytes][8B file_size][32B sha256]
+//	Raspberry → Android: [8B resume_offset]   ← server dice da dove riprendere
+//	Android → Raspberry: [file bytes da resume_offset...]
 //
 // Il server determina l'offset in autonomia:
 //   - 0 se non esiste nessun parziale valido su disco
@@ -226,6 +226,14 @@ func handleStream(stream quic.Stream, db *sql.DB, storagePath string) {
 // Il file viene scritto in <path>.part, verificato con SHA-256 e rinominato sul
 // path finale solo dopo una ricezione completa. Così un download non vede mai
 // un file parzialmente caricato.
+//
+// Protocollo v3 (ACK finale):
+//
+//	Raspberry → Android: [1B status]  ← 0x01 = file verificato e pubblicato, 0x00 = errore
+//
+// Il client NON deve ghostare il file locale finché non riceve 0x01.
+// Senza questo ACK, un checksum mismatch lato server causerebbe perdita dati:
+// il client troncherebbe l'originale mentre il server scarta il parziale.
 func handleUpload(rw io.ReadWriter, db *sql.DB, storagePath, deviceID string) {
 	log.Println("[Upload] Ricezione file in corso...")
 
@@ -352,6 +360,7 @@ func handleUpload(rw io.ReadWriter, db *sql.DB, storagePath, deviceID string) {
 	if totalBytes != expectedSize {
 		log.Printf("[Upload] ❌ Dimensione finale non valida per %s: ricevuti %d, attesi %d",
 			relPath, totalBytes, expectedSize)
+		rw.Write([]byte{0x00}) // NACK: il client NON deve ghostare
 		return
 	}
 
@@ -361,6 +370,7 @@ func handleUpload(rw io.ReadWriter, db *sql.DB, storagePath, deviceID string) {
 	checksum, err := calculateFileSHA256(partPath)
 	if err != nil {
 		log.Printf("[Upload] Errore checksum per '%s': %v", partPath, err)
+		rw.Write([]byte{0x00}) // NACK
 		return
 	}
 	if checksum != expectedChecksum {
@@ -369,12 +379,14 @@ func handleUpload(rw io.ReadWriter, db *sql.DB, storagePath, deviceID string) {
 		if rmErr := os.Remove(partPath); rmErr != nil {
 			log.Printf("[Upload] Errore rimozione parziale corrotto '%s': %v", partPath, rmErr)
 		}
+		rw.Write([]byte{0x00}) // NACK: il client NON deve ghostare il file locale
 		return
 	}
 
 	// 10. Pubblica il file finale solo dopo verifica completa.
 	if err := replaceFileAtomically(partPath, fullPath); err != nil {
 		log.Printf("[Upload] Errore rename atomico '%s' -> '%s': %v", partPath, fullPath, err)
+		rw.Write([]byte{0x00}) // NACK
 		return
 	}
 
@@ -409,6 +421,12 @@ func handleUpload(rw io.ReadWriter, db *sql.DB, storagePath, deviceID string) {
 		log.Printf("[Upload] ⚠️ Errore aggiornamento DB per '%s': %v", relPath, updateErr)
 	} else {
 		log.Printf("[Upload] 📦 DB aggiornato per '%s' (uuid: %s...)", relPath, fileUUID[:8])
+	}
+
+	// 12. ACK finale: il file è verificato e pubblicato su disco.
+	// Solo ORA il client può ghostare in sicurezza il file locale.
+	if _, ackErr := rw.Write([]byte{0x01}); ackErr != nil {
+		log.Printf("[Upload] ⚠️ Errore invio ACK per '%s': %v (file comunque salvato)", relPath, ackErr)
 	}
 }
 
@@ -459,8 +477,9 @@ func replaceFileAtomically(partPath, finalPath string) error {
 // handleDownload: invia un file fisico al client Android (Hydration).
 //
 // Protocollo v2:
-//   Android → Raspberry: [2B path_len][path bytes][8B resume_offset]
-//   Raspberry → Android: [1B status][8B file_size][32B sha256][file bytes da resume_offset...]
+//
+//	Android → Raspberry: [2B path_len][path bytes][8B resume_offset]
+//	Raspberry → Android: [1B status][8B file_size][32B sha256][file bytes da resume_offset...]
 //
 // Il client scarica su .tmp, verifica size/checksum e sostituisce il ghost solo
 // dopo una ricezione completa.
@@ -614,8 +633,9 @@ func handleDelete(rw io.ReadWriter, db *sql.DB, storagePath, deviceID string) {
 // handleSyncIndex: riceve la lista di relPath presenti sul telefono,
 // risponde con i relPath che esistono sul Raspberry ma NON nella lista → orfani.
 // Protocollo:
-//   Android → Raspberry: [4B count][per ogni file: 2B len + path UTF-8]
-//   Raspberry → Android: [4B count_orfani][per ogni orfano: 2B len + path UTF-8]
+//
+//	Android → Raspberry: [4B count][per ogni file: 2B len + path UTF-8]
+//	Raspberry → Android: [4B count_orfani][per ogni orfano: 2B len + path UTF-8]
 func handleSyncIndex(rw io.ReadWriter, db *sql.DB, deviceID string) {
 	log.Printf("[SyncIndex] Sincronizzazione indice per device: %s", deviceID)
 
@@ -736,15 +756,6 @@ func validatePath(storagePath, relPath string) (string, error) {
 	}
 
 	return absFile, nil
-}
-
-// diskFreeBytes restituisce i byte liberi sulla partizione che contiene il path dato.
-func diskFreeBytes(path string) (uint64, error) {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(path, &stat); err != nil {
-		return 0, err
-	}
-	return stat.Bavail * uint64(stat.Bsize), nil
 }
 
 // ============================================================

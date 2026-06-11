@@ -91,7 +91,14 @@ class VfsManager {
      *     e Google Photos finché non viene idratato. Il file fisico rimane
      *     su disco, quindi FileObserver continua a funzionare correttamente.
      */
-    fun markAsGhost(context: Context, file: File) {
+    /**
+     * [checksumHex]: SHA-256 del contenuto caricato sul Raspberry. Salvato nel marker
+     * .shadow per riconoscere i ghost "ripristinati" da app cloud (Google/Amazon
+     * Photos): se il contenuto ripristinato è identico, si ri-ghosta senza upload.
+     * [restoredCount]: quante volte un'app esterna ha ripristinato questo file —
+     * oltre la soglia il file viene marcato "conteso" e non più ghostato.
+     */
+    fun markAsGhost(context: Context, file: File, checksumHex: String? = null, restoredCount: Int = 0) {
         if (!file.exists()) return
 
         val originalSize = file.length()
@@ -107,9 +114,14 @@ class VfsManager {
 
         // 3. Crea il file .shadow con i metadati
         val shadowFile = File(file.parent, file.name + ".shadow")
-        shadowFile.writeText(
-            "originalSize=$originalSize\nstatus=GHOST\nlastModified=$lastModified\nhasThumbnail=${thumbnailBytes != null}"
-        )
+        shadowFile.writeText(buildString {
+            append("originalSize=$originalSize\n")
+            append("status=GHOST\n")
+            append("lastModified=$lastModified\n")
+            append("hasThumbnail=${thumbnailBytes != null}\n")
+            if (checksumHex != null) append("checksum=$checksumHex\n")
+            append("restoredCount=$restoredCount")
+        })
 
         // 4. Sostituisci il contenuto con il thumbnail oppure tronca a 0
         try {

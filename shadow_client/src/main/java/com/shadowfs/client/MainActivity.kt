@@ -64,6 +64,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnQrScan: Button
     private lateinit var btnPinnedFolders: Button
     private lateinit var btnBatteryOpt: Button
+    private lateinit var switchAutoHydration: Switch
 
     private var nsdManager: NsdManager? = null
     private var discoveryListener: NsdManager.DiscoveryListener? = null
@@ -111,6 +112,7 @@ class MainActivity : AppCompatActivity() {
         btnQrScan         = findViewById(R.id.btn_qr_scan)
         btnPinnedFolders  = findViewById(R.id.btn_pinned_folders)
         btnBatteryOpt     = findViewById(R.id.btn_battery_opt)
+        switchAutoHydration = findViewById(R.id.switch_auto_hydration)
     }
 
     private fun setupListeners() {
@@ -194,6 +196,22 @@ class MainActivity : AppCompatActivity() {
         // Gestione cartelle protette (mai ghostate)
         btnPinnedFolders.setOnClickListener {
             showPinnedFoldersDialog()
+        }
+
+        // Idratazione automatica: quando un'app apre un file ghost, ShadowFS lo
+        // riscarica dal Raspberry. Senza questo switch la preferenza
+        // "auto_hydration_enabled" resterebbe per sempre false (default) e
+        // l'idratazione trasparente non sarebbe mai attivabile.
+        switchAutoHydration.isChecked = getSharedPreferences(ShadowClient.PREFS_NAME, MODE_PRIVATE)
+            .getBoolean("auto_hydration_enabled", false)
+        switchAutoHydration.setOnCheckedChangeListener { _, enabled ->
+            getSharedPreferences(ShadowClient.PREFS_NAME, MODE_PRIVATE).edit()
+                .putBoolean("auto_hydration_enabled", enabled)
+                .apply()
+            toast(if (enabled)
+                "💧 Idratazione automatica attiva: apri un file ghost 2 volte per riscaricarlo"
+            else
+                "Idratazione automatica disattivata — usa 'Ripristina' nella lista ghost")
         }
 
         // Richiedi esenzione da Doze/battery optimization.

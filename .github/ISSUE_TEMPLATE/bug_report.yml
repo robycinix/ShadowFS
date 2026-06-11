@@ -1,0 +1,64 @@
+name: Bug report
+description: Report a reproducible ShadowFS problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. ShadowFS can affect local files, so precise reproduction details matter.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Android app
+        - Raspberry Pi daemon
+        - Pairing / certificates
+        - Installer / deployment
+        - Documentation
+        - Unknown
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Device, Android version, Raspberry Pi model/OS, network type.
+      placeholder: |
+        Android:
+        Raspberry Pi:
+        Network: LAN / Tailscale
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste relevant `adb logcat` and `journalctl -u shadowfs` lines. Remove private paths or IPs if needed.
+      render: text
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety impact
+      options:
+        - label: This may involve data loss or corrupted restored files.
+        - label: This may involve certificate, key or authentication exposure.
+        - label: Cloud backup or sync apps were active on the same folder.

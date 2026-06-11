@@ -116,6 +116,16 @@ func buildPairingPayload(tcpAddr, certsDir string) (*PairingPayload, error) {
 		return base64.StdEncoding.EncodeToString(data), nil
 	}
 
+	// Fallback: se la cartella dedicata (popolata dall'installer) non esiste,
+	// usa i certificati generati direttamente in "certs/". Così il pairing
+	// funziona anche lanciando il daemon a mano senza install_raspberry.sh.
+	if _, statErr := os.Stat(certsDir + "/ca.crt"); statErr != nil {
+		if _, fallbackErr := os.Stat("certs/ca.crt"); fallbackErr == nil {
+			log.Printf("📁 Pairing: '%s' non trovato — uso fallback 'certs/'", certsDir)
+			certsDir = "certs"
+		}
+	}
+
 	ca, err := readB64(certsDir + "/ca.crt")
 	if err != nil {
 		return nil, err

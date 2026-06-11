@@ -27,6 +27,12 @@ func ScanFolder(db *sql.DB, rootPath string) error {
 		if info.IsDir() {
 			return nil
 		}
+		// Salta i file temporanei di upload (.part): sono parziali riprendibili,
+		// non file completi. Indicizzarli inquinerebbe il DB con record fantasma
+		// che SyncIndex segnalerebbe come orfani.
+		if strings.HasSuffix(path, ".part") {
+			return nil
+		}
 		if err := analyzeFile(db, rootPath, path, info); err != nil {
 			log.Printf("⚠️ Errore analisi file %s: %v", path, err)
 		}
