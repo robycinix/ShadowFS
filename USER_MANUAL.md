@@ -14,7 +14,7 @@ cloud storage.
 
 ## Before You Start
 
-- A **Raspberry Pi** powered on and connected to the internet
+- A **Raspberry Pi** — or **any Linux home server** on your network (old PC, NAS, mini PC) — powered on and connected to the internet
 - An **Android phone** running Android 10 or newer
 - The **ShadowFS app** installed on the phone
 - Access to the same Wi-Fi network for the first setup

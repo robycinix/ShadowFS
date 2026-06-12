@@ -1,14 +1,14 @@
 <h1 align="center">ShadowFS</h1>
 
 <p align="center">
-  <strong>Self-hosted file ghosting for Android + Raspberry Pi.</strong><br>
+  <strong>Self-hosted file ghosting for Android + Raspberry Pi — or any home server on your network.</strong><br>
   Free phone storage without handing your files to a third-party cloud.
 </p>
 
 <p align="center">
   <a href="https://github.com/robycinix/ShadowFS/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/robycinix/ShadowFS/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/License-MIT-green.svg"></a>
-  <img alt="Android and Raspberry Pi" src="https://img.shields.io/badge/platform-Android%20%2B%20Raspberry%20Pi-38bdf8">
+  <img alt="Android and Raspberry Pi" src="https://img.shields.io/badge/platform-Android%20%2B%20Raspberry%20Pi%20%2F%20home%20server-38bdf8">
   <img alt="Project status" src="https://img.shields.io/badge/status-field%20testing-f59e0b">
 </p>
 
@@ -16,8 +16,9 @@
   <img src="docs/assets/shadowfs-hero.png" alt="ShadowFS hero: Android phone sending files securely to a Raspberry Pi" width="100%">
 </p>
 
-ShadowFS moves inactive files from your Android phone to your own Raspberry Pi,
-then restores them when you need them. Think storage optimization like iCloud,
+ShadowFS moves inactive files from your Android phone to your own Raspberry Pi —
+or **any home server connected to your network** (an old PC, a NAS, a mini PC:
+anything that runs Linux) — then restores them when you need them. Think storage optimization like iCloud,
 but self-hosted, local-first, and protected by mutual TLS.
 
 > Core safety rule: ShadowFS ghosts a local file only after the Raspberry Pi has
@@ -27,12 +28,12 @@ but self-hosted, local-first, and protected by mutual TLS.
 
 | Own your storage | Free phone space | Verified transfers | Built for real devices |
 | --- | --- | --- | --- |
-| Files stay on your Raspberry Pi, not a subscription cloud. | Cold photos, videos, PDFs and archives become lightweight ghosts. | Uploads and restores are checksum-gated before local files are changed. | Foreground service, QR pairing, Tailscale-friendly networking and recovery paths. |
+| Files stay on your Raspberry Pi or home server, not a subscription cloud. | Cold photos, videos, PDFs and archives become lightweight ghosts. | Uploads and restores are checksum-gated before local files are changed. | Foreground service, QR pairing, Tailscale-friendly networking and recovery paths. |
 
 ## What It Does
 
 - Detects large inactive files on Android.
-- Uploads originals to a Raspberry Pi daemon over TCP + TLS 1.3 + mTLS.
+- Uploads originals to a daemon on your Raspberry Pi or home server over TCP + TLS 1.3 + mTLS.
 - Verifies file integrity with SHA-256.
 - Replaces local files with tiny ghost markers or previews only after server ACK.
 - Restores files on demand, using temporary downloads until verification passes.
@@ -96,7 +97,11 @@ Recommended use today:
 
 ## Quick Start
 
-### Raspberry Pi
+### Raspberry Pi (or any Linux home server)
+
+The daemon is a single static Go binary: it runs the same on a Raspberry Pi,
+an old laptop, a NAS or any x86/ARM Linux box plugged into your home network.
+
 
 ```bash
 git clone https://github.com/robycinix/ShadowFS.git
