@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShadowFS — Libera il tuo telefono. I file restano tuoi.</title>
+<meta name="description" content="ShadowFS sposta automaticamente foto, video e documenti sul tuo Raspberry Pi quando non li usi. Come iCloud, ma tutto tuo: niente abbonamenti, niente cloud di terzi, crittografia mTLS.">
+<style>
+  :root {
+    --bg: #0A0A0F;
+    --bg2: #11111C;
+    --card: #15152A;
+    --card-border: #2A2A3A;
+    --text: #E0E0FF;
+    --muted: #8080A0;
+    --accent: #8080FF;
+    --accent2: #80E080;
+    --warn: #FFB060;
+    --ghost: #C0C0E0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+  .container { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* NAV */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10,10,15,.85); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--card-border);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; max-width: 1080px; margin: 0 auto; }
+  .logo { font-size: 1.3rem; font-weight: 800; color: var(--text); text-decoration: none; }
+  .logo span { color: var(--accent); }
+  .nav-links a { color: var(--muted); text-decoration: none; margin-left: 28px; font-size: .95rem; transition: color .2s; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-links .cta { color: var(--accent2); font-weight: 600; }
+
+  /* HERO */
+  header { padding: 90px 0 70px; text-align: center; position: relative; }
+  header::before {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(128,128,255,.14), transparent);
+    pointer-events: none;
+  }
+  .ghost-emoji { font-size: 4.2rem; display: inline-block; animation: float 3.5s ease-in-out infinite; }
+  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+  h1 { font-size: clamp(2.1rem, 5.2vw, 3.4rem); font-weight: 800; line-height: 1.15; margin: 18px 0 14px; }
+  h1 .grad {
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .subtitle { font-size: 1.2rem; color: var(--muted); max-width: 640px; margin: 0 auto 36px; }
+  .btn-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 14px 30px; border-radius: 12px;
+    font-weight: 700; font-size: 1rem; text-decoration: none; transition: transform .15s, box-shadow .15s;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn-primary { background: linear-gradient(90deg, #5858E0, #8080FF); color: #fff; box-shadow: 0 8px 28px rgba(128,128,255,.3); }
+  .btn-secondary { background: var(--card); color: var(--ghost); border: 1px solid var(--card-border); }
+  .hero-note { margin-top: 20px; color: var(--muted); font-size: .88rem; }
+
+  /* STATS BAR */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin: 30px auto 0; max-width: 860px; }
+  .stat { background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; padding: 18px 12px; }
+  .stat b { display: block; font-size: 1.5rem; color: var(--accent2); }
+  .stat span { color: var(--muted); font-size: .85rem; }
+
+  /* SECTIONS */
+  section { padding: 72px 0; }
+  section.alt { background: var(--bg2); }
+  h2 { font-size: clamp(1.6rem, 3.6vw, 2.3rem); font-weight: 800; text-align: center; margin-bottom: 12px; }
+  .section-sub { text-align: center; color: var(--muted); max-width: 620px; margin: 0 auto 48px; }
+
+  /* HOW IT WORKS */
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px; }
+  .step { background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 26px 22px; position: relative; }
+  .step-num {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: linear-gradient(135deg, #5858E0, #8080FF); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-weight: 800; margin-bottom: 14px;
+  }
+  .step h3 { font-size: 1.05rem; margin-bottom: 8px; }
+  .step p { color: var(--muted); font-size: .92rem; }
+
+  /* FLOW DIAGRAM */
+  .flow {
+    background: var(--card); border: 1px solid var(--card-border); border-radius: 16px;
+    padding: 28px; margin-top: 34px; text-align: center; font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: .92rem; color: var(--ghost); overflow-x: auto; white-space: nowrap;
+  }
+  .flow .arrow { color: var(--accent); margin: 0 10px; }
+
+  /* FEATURES */
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+  .feature { background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 26px 24px; transition: border-color .2s, transform .2s; }
+  .feature:hover { border-color: var(--accent); transform: translateY(-3px); }
+  .feature .icon { font-size: 1.9rem; margin-bottom: 12px; display: block; }
+  .feature h3 { font-size: 1.08rem; margin-bottom: 8px; }
+  .feature p { color: var(--muted); font-size: .92rem; }
+
+  /* SECURITY */
+  .sec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+  .sec-item { border-left: 3px solid var(--accent2); padding: 4px 0 4px 18px; }
+  .sec-item h3 { font-size: 1rem; margin-bottom: 5px; color: var(--accent2); }
+  .sec-item p { color: var(--muted); font-size: .9rem; }
+
+  /* CLOUD */
+  .cloud-box {
+    background: linear-gradient(135deg, rgba(255,176,96,.07), rgba(128,128,255,.05));
+    border: 1px solid rgba(255,176,96,.3); border-radius: 16px; padding: 30px;
+  }
+  .cloud-box h3 { color: var(--warn); margin-bottom: 10px; }
+  .cloud-box p { color: var(--ghost); font-size: .95rem; margin-bottom: 10px; }
+  .cloud-box ul { list-style: none; margin-top: 14px; }
+  .cloud-box li { padding: 7px 0 7px 28px; position: relative; color: var(--muted); font-size: .92rem; }
+  .cloud-box li::before { content: "🛡️"; position: absolute; left: 0; }
+
+  /* FAQ */
+  details {
+    background: var(--card); border: 1px solid var(--card-border); border-radius: 12px;
+    margin-bottom: 12px; overflow: hidden;
+  }
+  summary { padding: 18px 22px; cursor: pointer; font-weight: 600; list-style: none; position: relative; }
+  summary::after { content: "+"; position: absolute; right: 22px; color: var(--accent); font-size: 1.3rem; transition: transform .2s; }
+  details[open] summary::after { transform: rotate(45deg); }
+  details p { padding: 0 22px 18px; color: var(--muted); font-size: .93rem; }
+
+  /* CTA FINALE */
+  .final-cta { text-align: center; }
+  .final-cta .ghost-emoji { font-size: 3rem; }
+
+  /* FOOTER */
+  footer { border-top: 1px solid var(--card-border); padding: 34px 0; text-align: center; color: var(--muted); font-size: .85rem; }
+  footer a { color: var(--accent); text-decoration: none; }
+
+  @media (max-width: 640px) {
+    .nav-links a:not(.cta) { display: none; }
+    section { padding: 54px 0; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a class="logo" href="#">👻 Shadow<span>FS</span></a>
+    <div class="nav-links">
+      <a href="#come-funziona">Come funziona</a>
+      <a href="#funzioni">Funzioni</a>
+      <a href="#sicurezza">Sicurezza</a>
+      <a href="#faq">FAQ</a>
+      <a class="cta" href="#inizia">Inizia →</a>
+    </div>
+  </div>
+</nav>
+
+<header>
+  <div class="container">
+    <span class="ghost-emoji">👻</span>
+    <h1>Memoria piena?<br><span class="grad">Il tuo Raspberry ha spazio.</span></h1>
+    <p class="subtitle">
+      ShadowFS sposta automaticamente foto, video e documenti che non usi sul Raspberry Pi di casa —
+      e te li restituisce quando ti servono. Come iCloud, ma <strong>tutto tuo</strong>.
+    </p>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="#inizia">🚀 Installa in 10 minuti</a>
+      <a class="btn btn-secondary" href="#come-funziona">Scopri come funziona</a>
+    </div>
+    <p class="hero-note">Open source · Self-hosted · Zero abbonamenti · Zero cloud di terzi</p>
+
+    <div class="stats">
+      <div class="stat"><b>0 €</b><span>al mese, per sempre</span></div>
+      <div class="stat"><b>SHA-256</b><span>ogni file verificato byte per byte</span></div>
+      <div class="stat"><b>TLS 1.3 + mTLS</b><span>crittografia di livello bancario</span></div>
+      <div class="stat"><b>100% tuo</b><span>i dati non lasciano la tua rete</span></div>
+    </div>
+  </div>
+</header>
+
+<section id="come-funziona" class="alt">
+  <div class="container">
+    <h2>Come funziona</h2>
+    <p class="section-sub">Quattro passaggi, completamente automatici. Tu non devi fare niente.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Rileva</h3>
+        <p>Quando lo spazio scende sotto il 15%, ShadowFS trova i file grandi che non apri da almeno 3 giorni.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Trasferisce</h3>
+        <p>Li invia al Raspberry su canale cifrato. Il file locale viene svuotato <strong>solo dopo</strong> la conferma di ricezione verificata.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Ghosta</h3>
+        <p>Sul telefono resta una miniatura leggerissima. La galleria continua a mostrare l'anteprima, lo spazio è libero.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <h3>Restituisce</h3>
+        <p>Apri il file (o premi Ripristina) e torna sul telefono in pochi secondi, integro e verificato. Dopo un'ora, torna ghost.</p>
+      </div>
+    </div>
+    <div class="flow">
+      📱 File inattivo <span class="arrow">─▶</span> 🔐 TLS 1.3 + mTLS <span class="arrow">─▶</span> 🍓 Raspberry Pi <span class="arrow">─▶</span> ✅ Verifica SHA-256 <span class="arrow">─▶</span> 👻 Ghost sul telefono
+    </div>
+  </div>
+</section>
+
+<section id="funzioni">
+  <div class="container">
+    <h2>Tutto quello che serve. Niente di superfluo.</h2>
+    <p class="section-sub">Progettato per funzionare da solo, in background, per mesi.</p>
+    <div class="features">
+      <div class="feature">
+        <span class="icon">📷</span>
+        <h3>Pairing in 10 secondi</h3>
+        <p>Inquadri il QR Code mostrato dal Raspberry e sei connesso: IP, porta e certificati si configurano da soli. Il QR vale 5 minuti e funziona una sola volta.</p>
+      </div>
+      <div class="feature">
+        <span class="icon">🔄</span>
+        <h3>Resume automatico</h3>
+        <p>Cade la rete a metà di un video da 2 GB? Al tentativo successivo il trasferimento riparte esattamente dal byte interrotto. In upload e in download.</p>
+      </div>
+      <div class="feature">
+        <span class="icon">🌍</span>
+        <h3>Funziona ovunque</h3>
+        <p>Con Tailscale il telefono raggiunge il Raspberry anche in 4G o dal Wi-Fi del bar. Nessuna porta da aprire sul router, nessuna configurazione.</p>
+      </div>
+      <div class="feature">
+        <span class="icon">🛡️</span>
+        <h3>Anti-loop cloud</h3>
+        <p>Google Photos ripristina i file ghostati? ShadowFS se ne accorge, evita upload inutili e, se l'app insiste, cede il file e ti avvisa. Mai guerre infinite.</p>
+      </div>
+      <div class="feature">
+        <span class="icon">📌</span>
+        <h3>Cartelle protette</h3>
+        <p>Decidi tu cosa non va mai toccato: documenti di lavoro, WhatsApp, cartelle sincronizzate con altri servizi. ShadowFS le ignora per sempre.</p>
+      </div>
+      <div class="feature">
+        <span class="icon">👨‍👩‍👧</span>
+        <h3>Multi-dispositivo</h3>
+        <p>Ogni telefono della famiglia ha il suo spazio isolato sul Raspberry, con certificati personali. Un comando per aggiungere un dispositivo.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="sicurezza" class="alt">
+  <div class="container">
+    <h2>La sicurezza non è un'opzione</h2>
+    <p class="section-sub">Ogni scelta di design parte da una domanda: "e se va storto?"</p>
+    <div class="sec-grid">
+      <div class="sec-item">
+        <h3>Mai perdita di dati</h3>
+        <p>Il file sul telefono viene svuotato solo dopo che il Raspberry conferma: ricevuto, checksum verificato, salvato su disco. Nessuna conferma = file intatto.</p>
+      </div>
+      <div class="sec-item">
+        <h3>mTLS bidirezionale</h3>
+        <p>Non solo il telefono verifica il server: anche il Raspberry accetta solo telefoni con certificato firmato dalla TUA CA privata. Nessun altro entra.</p>
+      </div>
+      <div class="sec-item">
+        <h3>TLS 1.3, niente legacy</h3>
+        <p>Solo l'ultima versione del protocollo. Niente downgrade, niente cifrari deboli.</p>
+      </div>
+      <div class="sec-item">
+        <h3>Trasferimenti atomici</h3>
+        <p>File temporanei .part e .tmp: nessun download vede mai un file a metà, nessun ghost viene sostituito da un file corrotto.</p>
+      </div>
+      <div class="sec-item">
+        <h3>Anti path-traversal</h3>
+        <p>Ogni percorso è validato sul server: impossibile uscire dalla cartella di storage, anche con richieste malevole.</p>
+      </div>
+      <div class="sec-item">
+        <h3>Pairing one-shot</h3>
+        <p>Il QR di configurazione scade in 5 minuti e funziona una sola volta. Token casuale da 128 bit.</p>
+      </div>
+    </div>
+
+    <div class="cloud-box" style="margin-top:42px">
+      <h3>⚠️ E se uso già Google Photos o Amazon Photos?</h3>
+      <p>Nessun problema — ShadowFS è progettato per conviverci. I backup fotografici cloud non vengono mai corrotti, e se un servizio "ripristina" un file ghostato, ShadowFS reagisce da solo:</p>
+      <ul>
+        <li>Primo ripristino: re-ghost intelligente senza ricaricare nulla (il contenuto è già sul Raspberry)</li>
+        <li>Secondo ripristino: il file viene escluso dal ghosting e ricevi una notifica — il loop muore lì</li>
+        <li>Tetto di sicurezza: massimo 15 idratazioni automatiche all'ora, sempre</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="container">
+    <h2>Domande frequenti</h2>
+    <p class="section-sub">Le risposte oneste, senza marketing.</p>
+
+    <details>
+      <summary>I miei file sono al sicuro? Davvero?</summary>
+      <p>Sì, per design: il file sul telefono viene svuotato solo dopo che il Raspberry ha confermato di averlo ricevuto, verificato con checksum SHA-256 e salvato su disco. Se la rete cade, se il disco è pieno, se il checksum non torna — il file sul telefono resta intatto. Il Raspberry però è una copia singola: per i file insostituibili, un backup periodico del Raspberry stesso resta una buona idea.</p>
+    </details>
+    <details>
+      <summary>Quanto spazio posso liberare?</summary>
+      <p>Dipende da quanto pesa la tua libreria: tipicamente decine di GB tra video, foto e archivi. Vengono ghostati i file sopra i 512 KB non usati da 3 giorni — i file recenti e quelli piccoli restano sempre sul telefono.</p>
+    </details>
+    <details>
+      <summary>E se apro una foto ghostata mentre sono al mare?</summary>
+      <p>Con Tailscale attivo, il telefono raggiunge il Raspberry di casa anche in 4G: la foto si riscarica in pochi secondi. La miniatura intanto è sempre visibile in galleria.</p>
+    </details>
+    <details>
+      <summary>Serve essere esperti per installarlo?</summary>
+      <p>Serve saper copiare 3 comandi nel terminale del Raspberry — l'installer fa tutto il resto (Go, compilazione, certificati, servizio, firewall, QR). Lato telefono: scansioni il QR e concedi i permessi guidati. Dieci minuti in tutto.</p>
+    </details>
+    <details>
+      <summary>Che differenza c'è con Google One / iCloud?</summary>
+      <p>Stesso comfort, filosofia opposta: i file stanno su un hardware che possiedi, cifrati con certificati che generi tu, senza canone mensile e senza che nessuna azienda possa leggerli, analizzarli o chiuderti l'account.</p>
+    </details>
+    <details>
+      <summary>Quali telefoni e Raspberry sono supportati?</summary>
+      <p>Android 10 o superiore (consigliato 11+). Lato server qualsiasi Raspberry Pi con Raspberry Pi OS — anche un vecchio Pi 3 con un disco USB. Il daemon è scritto in Go ed è leggerissimo.</p>
+    </details>
+    <details>
+      <summary>È open source?</summary>
+      <p>Sì: daemon Go, app Android Kotlin e installer sono completamente ispezionabili. Il protocollo è documentato nel README — niente scatole nere per i tuoi dati.</p>
+    </details>
+  </div>
+</section>
+
+<section id="inizia" class="alt final-cta">
+  <div class="container">
+    <span class="ghost-emoji">👻</span>
+    <h2>Pronto a liberare il telefono?</h2>
+    <p class="section-sub">Un Raspberry, dieci minuti, zero abbonamenti. Per sempre.</p>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="https://github.com/robycinix/ShadowFS" id="btn-github">⭐ Vai al progetto su GitHub</a>
+      <a class="btn btn-secondary" href="../USER_MANUAL.md">📖 Leggi il Manuale Utente</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <p>👻 <strong>ShadowFS</strong> — perché i tuoi file sono tuoi.</p>
+    <p style="margin-top:8px">Self-hosted · TLS 1.3 + mTLS · SHA-256 · Open Source</p>
+  </div>
+</footer>
+
+</body>
+</html>

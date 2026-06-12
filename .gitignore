@@ -36,5 +36,3 @@ shadow_daemon/certs_for_android*/
 *.tmp
 *.part
 
-# Local landing page draft, not part of the GitHub repository
-sito/
