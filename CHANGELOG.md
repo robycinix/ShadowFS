@@ -9,9 +9,22 @@ and this project aims to use semantic versioning once releases begin.
 
 ### Added
 
+- Project website (`sito/`) with localized guides in English, Italian, German,
+  Spanish and French.
+- Redesigned Android client UI (new drawables, hero layout, status indicators).
 - GitHub-facing project documentation and contribution guidelines.
 - CI workflow for Go checks and Android debug builds.
 - Issue and pull request templates for safer bug reports.
+
+### Changed
+
+- README refreshed: updated repository layout, localized-docs links and badges.
+
+### Removed
+
+- Unused legacy Protobuf schema (`proto/`) — the wire protocol is a raw binary
+  framing with opcodes; a formal schema remains a roadmap item.
+- Stray temporary files (`shadow_daemon/daemon-go-tmp-umask`, `sito/__t`).
 
 ### Current Capabilities
 

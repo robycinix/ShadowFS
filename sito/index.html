@@ -1,0 +1,2472 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShadowFS | Libera il telefono. I file restano tuoi.</title>
+<meta name="description" content="ShadowFS libera spazio su Android spostando in modo sicuro foto, video e documenti inattivi sul tuo Raspberry Pi o server di casa. Self-hosted, mTLS, zero abbonamenti.">
+<meta property="og:title" content="ShadowFS | Libera il telefono. I file restano tuoi.">
+<meta property="og:description" content="Storage optimization come iCloud, ma self-hosted: Android + Raspberry Pi, TLS 1.3, mTLS e file sempre sotto il tuo controllo.">
+<meta property="og:image" content="assets/shadowfs-hero-wow.png">
+<meta name="theme-color" content="#07110f">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #07110f;
+    --bg-soft: #0c1714;
+    --surface: rgba(14, 28, 23, .86);
+    --surface-strong: #12221d;
+    --surface-warm: #1f1b16;
+    --line: rgba(223, 255, 238, .16);
+    --line-strong: rgba(223, 255, 238, .28);
+    --text: #f5fff9;
+    --muted: #a8bdb3;
+    --soft: #d8efe3;
+    --mint: #62f2b5;
+    --cyan: #66d9ff;
+    --coral: #ff8f70;
+    --gold: #ffd166;
+    --ink: #05100d;
+    --shadow: 0 24px 70px rgba(0, 0, 0, .36);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background:
+      linear-gradient(180deg, rgba(7, 17, 15, .45), var(--bg) 34rem),
+      var(--bg);
+    color: var(--text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    line-height: 1.55;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -3;
+    background-image:
+      linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: linear-gradient(to bottom, black, transparent 72%);
+  }
+  a { color: inherit; }
+  img { max-width: 100%; display: block; }
+  .container {
+    width: min(1160px, calc(100% - 40px));
+    margin: 0 auto;
+  }
+
+  .site-nav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    border-bottom: 1px solid var(--line);
+    background: rgba(7, 17, 15, .78);
+    backdrop-filter: blur(18px);
+  }
+  .nav-inner {
+    min-height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+    text-decoration: none;
+    font-weight: 900;
+    letter-spacing: 0;
+    white-space: nowrap;
+  }
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(98, 242, 181, .48);
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(98,242,181,.22), rgba(255,143,112,.14));
+    box-shadow: 0 0 28px rgba(98, 242, 181, .16);
+    font-size: 1.15rem;
+  }
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    color: var(--muted);
+    font-size: .95rem;
+  }
+  .nav-links a {
+    text-decoration: none;
+    transition: color .18s ease;
+  }
+  .nav-links a:hover { color: var(--text); }
+  .nav-action {
+    color: var(--mint) !important;
+    font-weight: 800;
+  }
+  .language {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 5px 5px 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(255,255,255,.05);
+  }
+  .auto-badge {
+    max-width: 150px;
+    color: var(--soft);
+    font-size: .78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  select {
+    min-width: 70px;
+    color: var(--text);
+    background: var(--surface-strong);
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    padding: 8px 10px;
+    font: inherit;
+  }
+
+  .hero {
+    position: relative;
+    min-height: calc(100svh - 72px);
+    display: grid;
+    align-items: center;
+    padding: 58px 0 42px;
+    isolation: isolate;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: auto 0 0;
+    z-index: -1;
+    height: 42%;
+    background:
+      linear-gradient(90deg, transparent, rgba(98,242,181,.24), transparent),
+      repeating-linear-gradient(90deg, transparent 0 38px, rgba(255,255,255,.055) 38px 39px, transparent 39px 78px);
+    mask-image: linear-gradient(to top, black, transparent);
+    opacity: .5;
+    pointer-events: none;
+  }
+  .hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      linear-gradient(115deg, transparent 0 37%, rgba(98,242,181,.10) 37.2% 37.45%, transparent 37.7%),
+      linear-gradient(115deg, transparent 0 51%, rgba(102,217,255,.13) 51.15% 51.35%, transparent 51.6%),
+      linear-gradient(115deg, transparent 0 65%, rgba(255,143,112,.10) 65.1% 65.34%, transparent 65.58%);
+    pointer-events: none;
+  }
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    overflow: hidden;
+  }
+  .hero-bg img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    filter: saturate(1.08) contrast(1.08);
+    opacity: .78;
+  }
+  .hero-bg::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(90deg, rgba(7,17,15,.97) 0%, rgba(7,17,15,.75) 39%, rgba(7,17,15,.20) 100%),
+      linear-gradient(180deg, rgba(7,17,15,.04) 0%, rgba(7,17,15,.46) 62%, var(--bg) 100%);
+  }
+  .hero-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.03fr) minmax(320px, .72fr);
+    gap: 50px;
+    align-items: center;
+  }
+  .hero-copy {
+    position: relative;
+    padding: 22px 0;
+  }
+  .hero-copy::before {
+    content: "";
+    position: absolute;
+    left: -18px;
+    top: 7px;
+    bottom: 7px;
+    width: 3px;
+    border-radius: 999px;
+    background: linear-gradient(var(--mint), var(--cyan), var(--coral));
+    box-shadow: 0 0 28px rgba(98,242,181,.42);
+  }
+  .ghost-mascot {
+    position: relative;
+    width: 86px;
+    height: 100px;
+    margin: 0 0 22px;
+    filter: drop-shadow(0 0 26px rgba(98,242,181,.34));
+    animation: ghostFloat 4.8s ease-in-out infinite;
+  }
+  .ghost-body {
+    position: absolute;
+    inset: 0 7px 10px;
+    border: 1px solid rgba(245,255,249,.65);
+    border-radius: 42px 42px 24px 24px;
+    background:
+      radial-gradient(circle at 34% 33%, #07110f 0 4px, transparent 5px),
+      radial-gradient(circle at 66% 33%, #07110f 0 4px, transparent 5px),
+      radial-gradient(circle at 50% 53%, rgba(7,17,15,.72) 0 8px, transparent 9px),
+      linear-gradient(145deg, rgba(245,255,249,.96), rgba(102,217,255,.44));
+    box-shadow:
+      inset -18px -20px 35px rgba(98,242,181,.25),
+      inset 12px 10px 28px rgba(255,255,255,.40);
+  }
+  .ghost-body::after {
+    content: "";
+    position: absolute;
+    left: -1px;
+    right: -1px;
+    bottom: -12px;
+    height: 28px;
+    background:
+      radial-gradient(18px 20px at 14px 0, rgba(245,255,249,.95) 98%, transparent 100%),
+      radial-gradient(18px 20px at 42px 0, rgba(213,250,235,.86) 98%, transparent 100%),
+      radial-gradient(18px 20px at 70px 0, rgba(245,255,249,.95) 98%, transparent 100%);
+  }
+  .ghost-halo {
+    position: absolute;
+    inset: 16px -22px auto;
+    height: 54px;
+    border: 1px solid rgba(98,242,181,.38);
+    border-radius: 50%;
+    transform: rotate(-10deg);
+    opacity: .68;
+  }
+  @keyframes ghostFloat {
+    0%, 100% { transform: translate3d(0,0,0) rotate(-2deg); }
+    50% { transform: translate3d(0,-13px,0) rotate(3deg); }
+  }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    width: fit-content;
+    margin: 0 0 18px;
+    padding: 8px 12px;
+    color: var(--soft);
+    border: 1px solid rgba(98,242,181,.28);
+    border-radius: 999px;
+    background: rgba(98,242,181,.08);
+    font-size: .88rem;
+    font-weight: 750;
+  }
+  .pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--mint);
+    box-shadow: 0 0 0 7px rgba(98,242,181,.14);
+  }
+  h1, h2, h3, p { margin-top: 0; }
+  h1 {
+    max-width: 760px;
+    margin-bottom: 18px;
+    font-size: clamp(3rem, 9vw, 7.2rem);
+    line-height: .9;
+    letter-spacing: 0;
+    font-weight: 950;
+    text-shadow: 0 18px 70px rgba(0,0,0,.62);
+  }
+  .hero-subtitle {
+    max-width: 690px;
+    margin-bottom: 30px;
+    color: var(--soft);
+    font-size: clamp(1.08rem, 2vw, 1.35rem);
+  }
+  .hero-subtitle strong { color: var(--mint); }
+  .button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+  .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 13px 18px;
+    border-radius: 12px;
+    text-decoration: none;
+    font-weight: 850;
+    border: 1px solid transparent;
+    transition: transform .18s ease, border-color .18s ease, background .18s ease;
+  }
+  .button:hover { transform: translateY(-2px); }
+  .button.primary {
+    color: var(--ink);
+    background: linear-gradient(135deg, var(--mint), var(--cyan));
+    box-shadow: 0 18px 45px rgba(98, 242, 181, .22);
+  }
+  .button.secondary {
+    color: var(--text);
+    border-color: var(--line-strong);
+    background: rgba(7,17,15,.78);
+    backdrop-filter: blur(10px);
+  }
+  .hero-note {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 24px;
+    color: var(--muted);
+    font-size: .92rem;
+  }
+  .hero-note span {
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(255,255,255,.045);
+  }
+
+  .signal-panel {
+    align-self: stretch;
+    display: grid;
+    align-content: end;
+    min-height: 540px;
+    perspective: 1400px;
+  }
+  .device-demo {
+    position: relative;
+    border: 1px solid var(--line-strong);
+    border-radius: 22px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.11), rgba(255,255,255,.04)),
+      rgba(14,28,23,.82);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    transform: rotateX(2deg) rotateY(-7deg);
+    transform-origin: center;
+  }
+  .device-demo::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(120deg, rgba(255,255,255,.20), transparent 28%),
+      repeating-linear-gradient(0deg, transparent 0 15px, rgba(98,242,181,.035) 15px 16px);
+    mix-blend-mode: screen;
+  }
+  .device-demo::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    padding: 1px;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(135deg, rgba(98,242,181,.55), transparent 28%, transparent 70%, rgba(255,143,112,.42));
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+  }
+  .demo-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .demo-title { font-weight: 900; }
+  .demo-status { color: var(--mint); font-size: .9rem; font-weight: 850; }
+  .demo-body { padding: 18px; }
+  .storage-ring {
+    width: 180px;
+    aspect-ratio: 1;
+    margin: 8px auto 22px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background:
+      conic-gradient(var(--mint) 0 73%, rgba(255,255,255,.12) 73% 100%);
+    position: relative;
+    box-shadow: 0 0 55px rgba(98,242,181,.16);
+  }
+  .storage-ring::before {
+    content: "";
+    position: absolute;
+    inset: 14px;
+    border-radius: 50%;
+    background: var(--surface-strong);
+  }
+  .storage-ring span {
+    position: relative;
+    text-align: center;
+    font-weight: 950;
+    font-size: 2rem;
+  }
+  .storage-ring small {
+    display: block;
+    color: var(--muted);
+    font-size: .75rem;
+    font-weight: 700;
+  }
+  .file-stack {
+    display: grid;
+    gap: 10px;
+  }
+  .file-row {
+    display: grid;
+    grid-template-columns: 38px 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(255,255,255,.045);
+  }
+  .file-icon {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: rgba(102, 217, 255, .12);
+  }
+  .file-row b { display: block; font-size: .95rem; }
+  .file-row small { color: var(--muted); }
+  .file-tag {
+    color: var(--ink);
+    background: var(--gold);
+    padding: 5px 8px;
+    border-radius: 999px;
+    font-size: .73rem;
+    font-weight: 900;
+  }
+  .transfer-line {
+    position: relative;
+    height: 8px;
+    margin: 18px 4px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255,255,255,.12);
+  }
+  .transfer-line::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    width: 42%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--coral), var(--mint), var(--cyan));
+    animation: transfer 2.4s ease-in-out infinite;
+  }
+  @keyframes transfer {
+    0% { transform: translateX(-110%); }
+    100% { transform: translateX(250%); }
+  }
+
+  section { padding: 86px 0; }
+  .section-head {
+    max-width: 760px;
+    margin: 0 auto 42px;
+    text-align: center;
+  }
+  .section-kicker {
+    margin-bottom: 10px;
+    color: var(--coral);
+    font-size: .86rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+  h2 {
+    margin-bottom: 12px;
+    font-size: clamp(2rem, 4.5vw, 3.8rem);
+    line-height: 1;
+    letter-spacing: 0;
+    font-weight: 950;
+  }
+  .section-sub {
+    margin: 0 auto;
+    color: var(--muted);
+    font-size: 1.05rem;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    background: rgba(255,255,255,.035);
+  }
+  .stat {
+    position: relative;
+    min-height: 146px;
+    padding: 28px;
+    border-right: 1px solid var(--line);
+    overflow: hidden;
+  }
+  .stat::after {
+    content: "";
+    position: absolute;
+    inset: auto 20px 18px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--mint), transparent);
+    opacity: .5;
+  }
+  .stat:last-child { border-right: 0; }
+  .stat b {
+    display: block;
+    margin-bottom: 7px;
+    color: var(--mint);
+    font-size: clamp(1.7rem, 3.5vw, 2.7rem);
+    line-height: 1;
+    font-weight: 950;
+  }
+  .stat span { color: var(--muted); }
+
+  .workflow {
+    display: grid;
+    grid-template-columns: .8fr 1fr;
+    gap: 26px;
+    align-items: stretch;
+  }
+  .terminal, .timeline, .feature, .security-card, .compare-wrap, .start-card, details {
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+    box-shadow: 0 12px 40px rgba(0,0,0,.18);
+  }
+  .terminal {
+    overflow: hidden;
+    align-self: start;
+  }
+  .terminal-bar {
+    display: flex;
+    gap: 7px;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(0,0,0,.22);
+  }
+  .terminal-bar span {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--coral);
+  }
+  .terminal-bar span:nth-child(2) { background: var(--gold); }
+  .terminal-bar span:nth-child(3) { background: var(--mint); }
+  pre {
+    margin: 0;
+    padding: 22px;
+    white-space: pre-wrap;
+    color: #d7ffe9;
+    font: 500 .92rem/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .timeline {
+    display: grid;
+    gap: 0;
+    overflow: hidden;
+  }
+  .timeline-item {
+    display: grid;
+    grid-template-columns: 54px 1fr;
+    gap: 16px;
+    padding: 22px;
+    border-bottom: 1px solid var(--line);
+  }
+  .timeline-item:last-child { border-bottom: 0; }
+  .step-num {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    color: var(--ink);
+    background: var(--mint);
+    border-radius: 13px;
+    font-weight: 950;
+  }
+  .timeline h3 { margin-bottom: 6px; font-size: 1.08rem; }
+  .timeline p { margin-bottom: 0; color: var(--muted); }
+
+  .features {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .feature {
+    position: relative;
+    min-height: 234px;
+    padding: 24px;
+    transition: transform .18s ease, border-color .18s ease, background .18s ease;
+    overflow: hidden;
+  }
+  .feature::after {
+    content: "";
+    position: absolute;
+    inset: auto -15% -34px 22%;
+    height: 82px;
+    background: linear-gradient(90deg, transparent, rgba(98,242,181,.12), transparent);
+    transform: rotate(-8deg);
+  }
+  .feature:hover {
+    transform: translateY(-4px);
+    border-color: rgba(98,242,181,.46);
+    background: rgba(18,34,29,.94);
+  }
+  .feature-icon {
+    width: 46px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 18px;
+    border-radius: 13px;
+    color: var(--ink);
+    background: linear-gradient(135deg, var(--mint), var(--gold));
+    font-weight: 950;
+  }
+  .feature h3 { margin-bottom: 9px; }
+  .feature h3, .feature p, .feature-icon { position: relative; z-index: 1; }
+  .feature p { color: var(--muted); margin-bottom: 0; }
+
+  .security-grid {
+    display: grid;
+    grid-template-columns: .85fr 1.15fr;
+    gap: 22px;
+    align-items: start;
+  }
+  .security-card { padding: 26px; }
+  .security-card.highlight {
+    background:
+      linear-gradient(135deg, rgba(255,143,112,.13), rgba(98,242,181,.08)),
+      var(--surface-warm);
+  }
+  .security-card h3 { margin-bottom: 10px; font-size: 1.3rem; }
+  .security-card p { color: var(--muted); margin-bottom: 18px; }
+  .checks {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .checks li {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 10px;
+    align-items: start;
+    color: var(--soft);
+  }
+  .checks li::before {
+    content: "OK";
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 22px;
+    color: var(--ink);
+    background: var(--mint);
+    border-radius: 8px;
+    font-size: .64rem;
+    font-weight: 950;
+  }
+  .security-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .security-list .security-card { min-height: 172px; }
+
+  .compare-wrap { overflow: hidden; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th, td {
+    padding: 18px;
+    text-align: left;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: 0; }
+  th {
+    color: var(--text);
+    background: rgba(255,255,255,.055);
+    font-size: .9rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+  td { color: var(--muted); }
+  td strong { color: var(--text); }
+
+  .start-grid {
+    display: grid;
+    grid-template-columns: 1.05fr .95fr;
+    gap: 22px;
+    align-items: stretch;
+  }
+  .start-card {
+    position: relative;
+    padding: 28px;
+    background:
+      linear-gradient(135deg, rgba(102,217,255,.10), rgba(255,209,102,.08)),
+      var(--surface);
+    overflow: hidden;
+  }
+  .start-card::after {
+    content: "";
+    position: absolute;
+    inset: auto 24px 0;
+    height: 3px;
+    border-radius: 999px 999px 0 0;
+    background: linear-gradient(90deg, var(--coral), var(--gold), var(--mint), var(--cyan));
+  }
+  .start-card h3 { font-size: 1.35rem; margin-bottom: 10px; }
+  .start-card p { color: var(--muted); }
+  .install-list {
+    display: grid;
+    gap: 12px;
+    margin: 20px 0 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: install;
+  }
+  .install-list li {
+    counter-increment: install;
+    display: grid;
+    grid-template-columns: 38px 1fr;
+    gap: 12px;
+    align-items: start;
+    color: var(--soft);
+  }
+  .install-list li::before {
+    content: counter(install);
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    color: var(--ink);
+    background: var(--gold);
+    border-radius: 11px;
+    font-weight: 950;
+  }
+
+  .faq-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  details {
+    padding: 0;
+    overflow: hidden;
+  }
+  summary {
+    position: relative;
+    cursor: pointer;
+    list-style: none;
+    padding: 20px 54px 20px 20px;
+    font-weight: 850;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after {
+    content: "+";
+    position: absolute;
+    top: 15px;
+    right: 18px;
+    color: var(--mint);
+    font-size: 1.8rem;
+    line-height: 1;
+    transition: transform .18s ease;
+  }
+  details[open] summary::after { transform: rotate(45deg); }
+  details p {
+    padding: 0 20px 20px;
+    color: var(--muted);
+  }
+
+  footer {
+    padding: 36px 0;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    background: rgba(0,0,0,.12);
+  }
+  .footer-inner {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    align-items: center;
+  }
+  .footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 16px;
+  }
+  .footer-links a {
+    color: var(--soft);
+    text-decoration: none;
+  }
+  .footer-links .footer-contribute {
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 14px;
+    border: 1px solid rgba(98,242,181,.48);
+    border-radius: 12px;
+    color: var(--ink);
+    background: linear-gradient(135deg, var(--mint), var(--cyan));
+    font-weight: 900;
+    box-shadow: 0 12px 30px rgba(98, 242, 181, .18);
+  }
+  .footer-legal {
+    max-width: 520px;
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: .86rem;
+  }
+  .doc-modal[hidden] { display: none; }
+  .doc-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+  }
+  .doc-backdrop {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 50% 0%, rgba(98,242,181,.16), transparent 34%),
+      rgba(0,0,0,.72);
+    backdrop-filter: blur(12px);
+  }
+  .doc-window {
+    position: relative;
+    width: min(980px, 100%);
+    max-height: min(82vh, 920px);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+    border-radius: 18px;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.09), transparent 34%),
+      rgba(10, 23, 19, .96);
+    box-shadow: 0 34px 120px rgba(0,0,0,.58);
+  }
+  .doc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255,255,255,.045);
+  }
+  .doc-title-wrap {
+    min-width: 0;
+  }
+  .doc-kicker {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--mint);
+    font-size: .76rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+  .doc-title {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: clamp(1.05rem, 2.4vw, 1.45rem);
+  }
+  .doc-close {
+    flex: 0 0 auto;
+    width: 42px;
+    height: 42px;
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    color: var(--text);
+    background: rgba(255,255,255,.06);
+    font: 900 1.45rem/1 ui-sans-serif, system-ui;
+    cursor: pointer;
+  }
+  .doc-close:hover {
+    border-color: rgba(98,242,181,.48);
+    background: rgba(98,242,181,.10);
+  }
+  .doc-content {
+    overflow: auto;
+    padding: 26px;
+    color: var(--soft);
+  }
+  .doc-content h1,
+  .doc-content h2,
+  .doc-content h3 {
+    margin: 1.4em 0 .55em;
+    line-height: 1.08;
+  }
+  .doc-content h1:first-child,
+  .doc-content h2:first-child,
+  .doc-content h3:first-child { margin-top: 0; }
+  .doc-content h1 { font-size: clamp(2rem, 5vw, 3.5rem); }
+  .doc-content h2 { font-size: clamp(1.45rem, 3.5vw, 2.2rem); }
+  .doc-content h3 { font-size: 1.2rem; }
+  .doc-content p,
+  .doc-content li {
+    color: var(--muted);
+  }
+  .doc-content a {
+    color: var(--mint);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(98,242,181,.35);
+  }
+  .doc-content ul,
+  .doc-content ol {
+    padding-left: 1.35rem;
+  }
+  .doc-content blockquote {
+    margin: 18px 0;
+    padding: 14px 18px;
+    border-left: 3px solid var(--mint);
+    background: rgba(98,242,181,.07);
+    color: var(--soft);
+  }
+  .doc-content code {
+    padding: .16em .38em;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    color: #d7ffe9;
+    background: rgba(0,0,0,.28);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .9em;
+  }
+  .doc-content pre {
+    margin: 18px 0;
+    padding: 16px;
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(0,0,0,.32);
+  }
+  .doc-content pre code {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .doc-loading {
+    min-height: 240px;
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+    text-align: center;
+  }
+  .back-top {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 30;
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(98,242,181,.46);
+    border-radius: 14px;
+    color: var(--ink);
+    background: linear-gradient(135deg, var(--mint), var(--cyan));
+    box-shadow: 0 18px 48px rgba(0,0,0,.35), 0 0 30px rgba(98,242,181,.22);
+    font-size: 1.4rem;
+    font-weight: 950;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(12px);
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  .back-top.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  .back-top:hover {
+    transform: translateY(-2px);
+  }
+  .cursor-ghost {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 120;
+    width: 34px;
+    height: 40px;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate3d(-100px,-100px,0);
+    transition: opacity .18s ease;
+    filter: drop-shadow(0 0 16px rgba(98,242,181,.5));
+  }
+  .cursor-ghost.is-active { opacity: .96; }
+  .cursor-ghost::before {
+    content: "";
+    position: absolute;
+    inset: 0 3px 6px;
+    border: 1px solid rgba(245,255,249,.72);
+    border-radius: 18px 18px 10px 10px;
+    background:
+      radial-gradient(circle at 35% 36%, #07110f 0 2px, transparent 3px),
+      radial-gradient(circle at 65% 36%, #07110f 0 2px, transparent 3px),
+      radial-gradient(circle at 50% 55%, rgba(7,17,15,.72) 0 4px, transparent 5px),
+      linear-gradient(145deg, rgba(245,255,249,.96), rgba(102,217,255,.5));
+  }
+  .cursor-ghost::after {
+    content: "";
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    bottom: 0;
+    height: 12px;
+    background:
+      radial-gradient(9px 10px at 8px 0, rgba(245,255,249,.96) 96%, transparent 100%),
+      radial-gradient(9px 10px at 17px 0, rgba(213,250,235,.82) 96%, transparent 100%),
+      radial-gradient(9px 10px at 27px 0, rgba(245,255,249,.96) 96%, transparent 100%);
+  }
+  .ghost-spark {
+    position: fixed;
+    z-index: 119;
+    width: 9px;
+    height: 9px;
+    pointer-events: none;
+    border-radius: 50%;
+    background: rgba(98,242,181,.85);
+    box-shadow: 0 0 18px rgba(98,242,181,.55);
+    animation: sparkFade .75s ease-out forwards;
+  }
+  @keyframes sparkFade {
+    to {
+      opacity: 0;
+      transform: translate3d(var(--spark-x), var(--spark-y), 0) scale(.15);
+    }
+  }
+
+  .reveal {
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity .6s ease, transform .6s ease;
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .ambient-cards {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .ambient-cards span {
+    position: absolute;
+    width: 56px;
+    height: 72px;
+    border: 1px solid rgba(98,242,181,.18);
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(98,242,181,.08), rgba(102,217,255,.04));
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+    animation: drift 9s ease-in-out infinite;
+  }
+  .ambient-cards span:nth-child(1) { left: 50%; top: 17%; animation-delay: -1s; }
+  .ambient-cards span:nth-child(2) { left: 66%; top: 28%; transform: scale(.74); animation-delay: -3s; }
+  .ambient-cards span:nth-child(3) { left: 78%; top: 13%; transform: scale(.56); animation-delay: -5s; }
+  @keyframes drift {
+    0%, 100% { translate: 0 0; opacity: .18; }
+    50% { translate: 0 -18px; opacity: .42; }
+  }
+
+  @media (max-width: 980px) {
+    .nav-links a:not(.nav-action) { display: none; }
+    .hero-layout, .workflow, .security-grid, .start-grid {
+      grid-template-columns: 1fr;
+    }
+    .signal-panel { min-height: auto; }
+    .device-demo { transform: none; }
+    .features, .stats, .faq-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 680px) {
+    .container { width: min(100% - 28px, 1160px); }
+    .nav-inner { min-height: 64px; }
+    .brand span:last-child { display: none; }
+    .language { padding-left: 9px; }
+    .auto-badge { display: none; }
+    .hero { padding-top: 42px; min-height: auto; }
+    h1 { font-size: clamp(3rem, 18vw, 5.4rem); }
+    section { padding: 64px 0; }
+    .features, .stats, .faq-grid, .security-list {
+      grid-template-columns: 1fr;
+    }
+    .stat { border-right: 0; border-bottom: 1px solid var(--line); }
+    .stat:last-child { border-bottom: 0; }
+    .button { width: 100%; }
+    .footer-inner { display: grid; }
+    .footer-links { justify-content: flex-start; }
+    .footer-links .footer-contribute { width: 100%; }
+    .doc-modal { padding: 10px; }
+    .doc-window { max-height: 88vh; border-radius: 14px; }
+    .doc-content { padding: 20px; }
+    .back-top { right: 14px; bottom: 14px; }
+    th, td { padding: 14px; font-size: .92rem; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      scroll-behavior: auto !important;
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .01ms !important;
+    }
+    .cursor-ghost,
+    .ghost-spark { display: none !important; }
+  }
+  @media (hover: none), (pointer: coarse) {
+    .cursor-ghost,
+    .ghost-spark { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<nav class="site-nav" aria-label="Primary">
+  <div class="container nav-inner">
+    <a class="brand" href="#top" aria-label="ShadowFS home">
+      <span class="brand-mark" aria-hidden="true">👻</span>
+      <span>ShadowFS</span>
+    </a>
+    <div class="nav-links">
+      <a href="#flow" data-i18n="nav.flow">Come funziona</a>
+      <a href="#features" data-i18n="nav.features">Funzioni</a>
+      <a href="#security" data-i18n="nav.security">Sicurezza</a>
+      <a href="#faq" data-i18n="nav.faq">FAQ</a>
+      <a href="https://github.com/robycinix/ShadowFS" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a class="nav-action" href="#start" data-i18n="nav.start">Inizia</a>
+      <label class="language">
+        <span class="auto-badge" id="autoBadge">Auto: Italiano</span>
+        <select id="languageSelect" aria-label="Language">
+          <option value="it">IT</option>
+          <option value="en">EN</option>
+          <option value="es">ES</option>
+          <option value="fr">FR</option>
+          <option value="de">DE</option>
+        </select>
+      </label>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="hero-bg" aria-hidden="true">
+    <img src="assets/shadowfs-hero-wow.png" alt="">
+  </div>
+  <div class="ambient-cards" aria-hidden="true"><span></span><span></span><span></span></div>
+  <div class="container hero-layout">
+    <div class="hero-copy">
+      <div class="ghost-mascot" aria-hidden="true">
+        <span class="ghost-halo"></span>
+        <span class="ghost-body"></span>
+      </div>
+      <p class="eyebrow"><span class="pulse-dot" aria-hidden="true"></span><span data-i18n="hero.eyebrow">Android + Raspberry Pi, senza cloud di terzi</span></p>
+      <h1>ShadowFS</h1>
+      <p class="hero-subtitle" data-i18n-html="hero.subtitle">Libera spazio sul telefono spostando foto, video e documenti inattivi sul tuo server di casa. Comfort da cloud, ma <strong>i file restano tuoi</strong>.</p>
+      <div class="button-row">
+        <a class="button primary" href="#start" data-i18n="hero.primary">Guida all'installazione</a>
+        <a class="button secondary" href="docs/en/overview.md" data-doc-href-it="docs/it/overview.md" data-doc-href-es="docs/es/overview.md" data-doc-href-fr="docs/fr/overview.md" data-doc-href-de="docs/de/overview.md" data-doc-modal data-doc-title="README" data-i18n="hero.secondary">Panoramica</a>
+      </div>
+      <p class="hero-note" aria-label="Highlights">
+        <span data-i18n="hero.note1">Open source</span>
+        <span data-i18n="hero.note2">Self-hosted</span>
+        <span data-i18n="hero.note3">TLS 1.3 + mTLS</span>
+        <span data-i18n="hero.note4">Zero abbonamenti</span>
+        <span data-i18n="hero.note5">In fase di test sul campo</span>
+      </p>
+    </div>
+
+    <div class="signal-panel" aria-label="ShadowFS live storage preview">
+      <div class="device-demo">
+        <div class="demo-top">
+          <div>
+            <div class="demo-title" data-i18n="demo.title">Telefono Android</div>
+            <small data-i18n="demo.subtitle">Connesso al server di casa</small>
+          </div>
+          <div class="demo-status" data-i18n="demo.status">Protetto</div>
+        </div>
+        <div class="demo-body">
+          <div class="storage-ring">
+            <span>73%<small data-i18n="demo.saved">spazio recuperato</small></span>
+          </div>
+          <div class="file-stack">
+            <div class="file-row">
+              <span class="file-icon" aria-hidden="true">4K</span>
+                <span><b data-i18n="demo.file1">Vacanze_2026.mov</b><small data-i18n="demo.file1sub">2,4 GB archiviati sul server</small></span>
+              <span class="file-tag" data-i18n="demo.tag">verificato</span>
+            </div>
+            <div class="transfer-line" aria-hidden="true"></div>
+            <div class="file-row">
+              <span class="file-icon" aria-hidden="true">RAW</span>
+              <span><b data-i18n="demo.file2">Ritratti.raw</b><small data-i18n="demo.file2sub">Ripristino su richiesta</small></span>
+              <span class="file-tag" data-i18n="demo.tag2">mTLS</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="stats" aria-label="ShadowFS metrics">
+    <div class="stat reveal"><b data-i18n="stat.one.value">0 EUR</b><span data-i18n="stat.one.label">al mese, per sempre</span></div>
+    <div class="stat reveal"><b>SHA-256</b><span data-i18n="stat.two.label">ogni file verificato byte per byte</span></div>
+    <div class="stat reveal"><b>mTLS</b><span data-i18n="stat.three.label">server e telefoni si autenticano a vicenda</span></div>
+    <div class="stat reveal"><b data-i18n="stat.four.value">100%</b><span data-i18n="stat.four.label">dati sotto il tuo controllo</span></div>
+  </section>
+
+  <section id="flow">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="section-kicker" data-i18n="flow.kicker">Flusso</p>
+        <h2 data-i18n="flow.title">Meno spazio occupato, accesso preservato.</h2>
+        <p class="section-sub" data-i18n="flow.sub">ShadowFS lavora in background: individua i file usati di rado, li trasferisce, li verifica e lascia sul telefono un segnaposto leggero.</p>
+      </div>
+      <div class="workflow">
+        <div class="terminal reveal">
+          <div class="terminal-bar" aria-hidden="true"><span></span><span></span><span></span></div>
+          <pre><code data-i18n="flow.code">shadowfs scan --when-storage-low
+> found 148 cold files
+> upload over TLS 1.3 + mTLS
+> verify sha256 checksums
+> replace originals with verified placeholders
+> restore on demand when opened</code></pre>
+        </div>
+        <div class="timeline reveal">
+          <div class="timeline-item">
+            <div class="step-num">1</div>
+            <div><h3 data-i18n="flow.step1.title">Rileva</h3><p data-i18n="flow.step1.body">Quando lo spazio scende, cerca file grandi che non apri da giorni.</p></div>
+          </div>
+          <div class="timeline-item">
+            <div class="step-num">2</div>
+            <div><h3 data-i18n="flow.step2.title">Trasferisce</h3><p data-i18n="flow.step2.body">Invia gli originali al server domestico su canale cifrato e riprendibile.</p></div>
+          </div>
+          <div class="timeline-item">
+            <div class="step-num">3</div>
+            <div><h3 data-i18n="flow.step3.title">Verifica</h3><p data-i18n="flow.step3.body">Sostituisce il file locale solo dopo checksum corretto e conferma finale del server.</p></div>
+          </div>
+          <div class="timeline-item">
+            <div class="step-num">4</div>
+            <div><h3 data-i18n="flow.step4.title">Ripristina</h3><p data-i18n="flow.step4.body">Quando apri un segnaposto, il file completo viene recuperato dal server.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="section-kicker" data-i18n="features.kicker">Per uso reale</p>
+        <h2 data-i18n="features.title">Pensato per telefoni pieni e reti imperfette.</h2>
+        <p class="section-sub" data-i18n="features.sub">Non e solo un uploader: gestisce abbinamento, ripresa dei trasferimenti, sincronizzazioni cloud e piu dispositivi.</p>
+      </div>
+      <div class="features">
+        <article class="feature reveal">
+          <div class="feature-icon" aria-hidden="true">QR</div>
+          <h3 data-i18n="features.one.title">Abbinamento guidato</h3>
+          <p data-i18n="features.one.body">Scansiona il QR del Raspberry: IP, porta e certificati vengono configurati in modo assistito.</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon" aria-hidden="true">RX</div>
+          <h3 data-i18n="features.two.title">Ripresa automatica</h3>
+          <p data-i18n="features.two.body">Se la rete si interrompe durante un file di grandi dimensioni, il trasferimento riparte dal punto corretto.</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon" aria-hidden="true">TS</div>
+          <h3 data-i18n="features.three.title">Pronto per Tailscale</h3>
+          <p data-i18n="features.three.body">Accedi al server di casa anche in 4G, senza aprire porte sul router.</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon" aria-hidden="true">AL</div>
+          <h3 data-i18n="features.four.title">Controllo sync cloud</h3>
+          <p data-i18n="features.four.body">Convive con Google Photos, Amazon Photos e servizi simili riducendo i cicli ripetuti di ripristino.</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon" aria-hidden="true">PIN</div>
+          <h3 data-i18n="features.five.title">Cartelle protette</h3>
+          <p data-i18n="features.five.body">Documenti di lavoro, chat e directory delicate possono essere escluse dalla gestione automatica.</p>
+        </article>
+        <article class="feature reveal">
+          <div class="feature-icon" aria-hidden="true">FAM</div>
+          <h3 data-i18n="features.six.title">Multi-dispositivo</h3>
+          <p data-i18n="features.six.body">Ogni telefono ha certificati personali e uno spazio isolato sul server.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="security">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="section-kicker" data-i18n="security.kicker">Sicurezza</p>
+        <h2 data-i18n="security.title">Prima regola: non perdere mai un file.</h2>
+        <p class="section-sub" data-i18n="security.sub">La comodita ha valore solo se gli originali restano protetti. ShadowFS modifica il telefono solo dopo la conferma completa del server.</p>
+      </div>
+      <div class="security-grid">
+        <article class="security-card highlight reveal">
+          <h3 data-i18n="security.main.title">Verifica prima della sostituzione</h3>
+          <p data-i18n="security.main.body">Il file locale viene alleggerito solo dopo ricezione completa, SHA-256 verificato, salvataggio su disco e ACK finale.</p>
+          <ul class="checks">
+            <li data-i18n="security.check1">Nessuna conferma, nessuna modifica locale.</li>
+            <li data-i18n="security.check2">File temporanei per upload e download incompleti.</li>
+            <li data-i18n="security.check3">Namespace isolato per ogni dispositivo.</li>
+          </ul>
+        </article>
+        <div class="security-list">
+          <article class="security-card reveal"><h3 data-i18n="security.card1.title">TLS 1.3 + mTLS</h3><p data-i18n="security.card1.body">Il telefono verifica il server e il server accetta solo telefoni con certificato firmato dalla tua CA privata.</p></article>
+          <article class="security-card reveal"><h3 data-i18n="security.card2.title">Abbinamento monouso</h3><p data-i18n="security.card2.body">Il QR scade in pochi minuti e vale una sola volta, con token casuale ad alta entropia.</p></article>
+          <article class="security-card reveal"><h3 data-i18n="security.card3.title">Percorsi server protetti</h3><p data-i18n="security.card3.body">I percorsi sono validati sul server per impedire richieste fuori dallo storage dedicato.</p></article>
+          <article class="security-card reveal"><h3 data-i18n="security.card4.title">Cloud sync controllato</h3><p data-i18n="security.card4.body">Limiti e rilevamento loop impediscono idratazioni automatiche infinite.</p></article>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="compare">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="section-kicker" data-i18n="compare.kicker">Confronto</p>
+        <h2 data-i18n="compare.title">Il comfort del cloud, con il controllo di casa.</h2>
+      </div>
+      <div class="compare-wrap reveal">
+        <table>
+          <thead>
+            <tr>
+              <th data-i18n="compare.col1">Tema</th>
+              <th>ShadowFS</th>
+              <th data-i18n="compare.col3">Cloud tradizionale</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><strong data-i18n="compare.row1.key">Dove stanno i file</strong></td><td data-i18n="compare.row1.a">Sul tuo Raspberry Pi, NAS o server Linux domestico.</td><td data-i18n="compare.row1.b">Su infrastruttura di terzi, con regole e prezzi loro.</td></tr>
+            <tr><td><strong data-i18n="compare.row2.key">Costo</strong></td><td data-i18n="compare.row2.a">Nessun canone ShadowFS: usi hardware e disco che possiedi.</td><td data-i18n="compare.row2.b">Abbonamento ricorrente quando la libreria cresce.</td></tr>
+            <tr><td><strong data-i18n="compare.row3.key">Accesso remoto</strong></td><td data-i18n="compare.row3.a">Indicato per una rete privata come Tailscale.</td><td data-i18n="compare.row3.b">Sempre mediato dal provider.</td></tr>
+            <tr><td><strong data-i18n="compare.row4.key">Verifica</strong></td><td data-i18n="compare.row4.a">Checksum SHA-256 prima di toccare il file locale.</td><td data-i18n="compare.row4.b">Garanzie meno verificabili e dipendenti dal servizio.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="start">
+    <div class="container start-grid">
+      <article class="start-card reveal">
+        <p class="section-kicker" data-i18n="start.kicker">Primo avvio</p>
+        <h2 data-i18n="start.title">Pronto in pochi passaggi.</h2>
+        <p data-i18n="start.body">Installa il daemon sul Raspberry o su un server Linux, avvia l'app Android e abbina il dispositivo con codice QR.</p>
+        <div class="button-row">
+          <a class="button primary" href="https://github.com/robycinix/ShadowFS" target="_blank" rel="noopener noreferrer" data-i18n="start.github">Apri su GitHub</a>
+          <a class="button secondary" href="docs/en/user-manual.md" data-doc-href-it="docs/it/manuale-utente.md" data-doc-href-es="docs/es/user-manual.md" data-doc-href-fr="docs/fr/user-manual.md" data-doc-href-de="docs/de/user-manual.md" data-doc-modal data-doc-title="Manuale utente" data-i18n="start.manual">Manuale utente</a>
+        </div>
+      </article>
+      <article class="start-card reveal">
+        <h3 data-i18n="start.steps.title">Passaggi principali</h3>
+        <ol class="install-list">
+          <li data-i18n="start.step1">Esegui il programma di installazione in `shadow_daemon` sul server domestico.</li>
+          <li data-i18n="start.step2">Apri l'app Android e scansiona il QR di abbinamento.</li>
+          <li data-i18n="start.step3">Scegli le cartelle protette e lascia ShadowFS in background.</li>
+        </ol>
+      </article>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="container">
+      <div class="section-head reveal">
+        <p class="section-kicker" data-i18n="faq.kicker">FAQ</p>
+        <h2 data-i18n="faq.title">Risposte chiare.</h2>
+      </div>
+      <div class="faq-grid">
+        <details class="reveal">
+          <summary data-i18n="faq.one.q">Come proteggete i miei file?</summary>
+          <p data-i18n="faq.one.a">ShadowFS non svuota l'originale finche il server non conferma ricezione, checksum e salvataggio. Per i file insostituibili resta comunque consigliato un backup del server.</p>
+        </details>
+        <details class="reveal">
+          <summary data-i18n="faq.two.q">Quanto spazio posso liberare?</summary>
+          <p data-i18n="faq.two.a">Dipende dalla libreria: video, foto RAW, PDF e archivi vecchi possono liberare decine di GB lasciando anteprime leggere sul telefono.</p>
+        </details>
+        <details class="reveal">
+          <summary data-i18n="faq.three.q">Funziona fuori casa?</summary>
+          <p data-i18n="faq.three.a">Si, usando una rete privata come Tailscale il telefono puo raggiungere il server anche da 4G o da un altro Wi-Fi.</p>
+        </details>
+        <details class="reveal">
+          <summary data-i18n="faq.four.q">Servono competenze tecniche?</summary>
+          <p data-i18n="faq.four.a">Serve familiarita minima con il terminale sul server. Lato telefono il pairing guidato via QR evita configurazioni manuali lunghe.</p>
+        </details>
+        <details class="reveal">
+          <summary data-i18n="faq.five.q">Devo mantenere un backup?</summary>
+          <p data-i18n="faq.five.a">Si. ShadowFS verifica i trasferimenti prima di modificare i file locali, ma non sostituisce una strategia di backup. Usalo prima con file non critici e mantieni una copia separata dei dati importanti.</p>
+        </details>
+        <details class="reveal">
+          <summary data-i18n="faq.six.q">Cosa succede se il server e spento?</summary>
+          <p data-i18n="faq.six.a">ShadowFS non modifica i file locali se il server non e raggiungibile. I trasferimenti restano in attesa o riprendono quando la connessione torna disponibile.</p>
+        </details>
+        <details class="reveal">
+          <summary data-i18n="faq.seven.q">Posso usare Google Photos o OneDrive?</summary>
+          <p data-i18n="faq.seven.a">Si, ma e meglio evitare che due servizi gestiscano la stessa cartella. Puoi proteggere DCIM, WhatsApp o cartelle cloud e usare ShadowFS per download, video grandi, PDF e archivi.</p>
+        </details>
+        <details class="reveal">
+          <summary data-i18n="faq.eight.q">Se elimino un file dal telefono, viene eliminato anche dal server?</summary>
+          <p data-i18n="faq.eight.a">No, non automaticamente. La copia sul server resta finche non decidi di pulire gli orfani dalla lista dei file gestiti.</p>
+        </details>
+        <details class="reveal">
+          <summary data-i18n="faq.nine.q">I miei file passano dai vostri server?</summary>
+          <p data-i18n="faq.nine.a">No. ShadowFS comunica tra il tuo telefono e il tuo server domestico. Il progetto non richiede un account ShadowFS e non ospita i tuoi file.</p>
+        </details>
+        <details class="reveal">
+          <summary data-i18n="faq.ten.q">Quanto costa usarlo?</summary>
+          <p data-i18n="faq.ten.a">ShadowFS non prevede abbonamenti. Usi il tuo hardware e il tuo disco. Restano eventuali costi personali, come corrente, storage, rete o servizi esterni che scegli di usare.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container footer-inner">
+    <div>
+      <strong>ShadowFS</strong>
+      <div data-i18n="footer.tagline">Perche i tuoi file sono tuoi.</div>
+      <div class="footer-legal" data-i18n="footer.disclaimer">Progetto in fase di test sul campo: non ancora un prodotto consumer rifinito, da non usare come unica copia di file importanti. Software fornito senza garanzie. Mantieni sempre un backup dei file importanti.</div>
+    </div>
+    <div class="footer-links">
+      <a href="docs/en/install.md" data-doc-href-it="docs/it/installazione.md" data-doc-href-es="docs/es/install.md" data-doc-href-fr="docs/fr/install.md" data-doc-href-de="docs/de/install.md" data-doc-modal data-doc-title="Guida di installazione" data-i18n="footer.install">Installazione</a>
+      <a href="docs/en/overview.md" data-doc-href-it="docs/it/overview.md" data-doc-href-es="docs/es/overview.md" data-doc-href-fr="docs/fr/overview.md" data-doc-href-de="docs/de/overview.md" data-doc-modal data-doc-title="README">README</a>
+      <a href="docs/en/security.md" data-doc-href-it="docs/it/sicurezza.md" data-doc-href-es="docs/es/security.md" data-doc-href-fr="docs/fr/security.md" data-doc-href-de="docs/de/security.md" data-doc-modal data-doc-title="Sicurezza" data-i18n="footer.security">Sicurezza</a>
+      <a href="https://github.com/robycinix/ShadowFS" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a class="footer-contribute" href="https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=robycinix77%40gmail.com&currency_code=EUR&item_name=ShadowFS" target="_blank" rel="noopener noreferrer" data-i18n="footer.contribute">Sostieni il progetto</a>
+    </div>
+  </div>
+</footer>
+
+<div class="doc-modal" id="docModal" hidden>
+  <div class="doc-backdrop" data-doc-close></div>
+  <section class="doc-window" role="dialog" aria-modal="true" aria-labelledby="docTitle" tabindex="-1">
+    <header class="doc-header">
+      <div class="doc-title-wrap">
+        <span class="doc-kicker" data-i18n="modal.kicker">Documento</span>
+        <h2 class="doc-title" id="docTitle">Manuale utente</h2>
+      </div>
+      <button class="doc-close" type="button" data-doc-close aria-label="Chiudi" data-i18n-label="modal.close">×</button>
+    </header>
+    <div class="doc-content" id="docContent">
+      <div class="doc-loading" data-i18n="modal.loading">Caricamento...</div>
+    </div>
+  </section>
+</div>
+
+<button class="back-top" id="backTop" type="button" aria-label="Torna su" title="Torna su" data-i18n-label="back.top" data-i18n-title="back.top">↑</button>
+<div class="cursor-ghost" id="cursorGhost" aria-hidden="true"></div>
+
+<script>
+const translations = {
+  it: {
+    "meta.title": "ShadowFS | Libera il telefono. I file restano tuoi.",
+    "meta.description": "ShadowFS libera spazio su Android spostando in modo sicuro foto, video e documenti inattivi sul tuo Raspberry Pi o server di casa. Self-hosted, mTLS, zero abbonamenti.",
+    "auto": "Auto: Italiano",
+    "nav.flow": "Come funziona",
+    "nav.features": "Funzioni",
+    "nav.security": "Sicurezza",
+    "nav.faq": "FAQ",
+    "nav.start": "Inizia",
+    "hero.eyebrow": "Android + Raspberry Pi, senza cloud di terzi",
+    "hero.subtitle": "Libera spazio sul telefono spostando foto, video e documenti inattivi sul tuo server di casa. Comfort da cloud, ma <strong>i file restano tuoi</strong>.",
+    "hero.primary": "Guida all'installazione",
+    "hero.secondary": "Panoramica",
+    "hero.note1": "Open source",
+    "hero.note2": "Self-hosted",
+    "hero.note3": "TLS 1.3 + mTLS",
+    "hero.note4": "Zero abbonamenti",
+    "hero.note5": "In fase di test sul campo",
+    "demo.title": "Telefono Android",
+    "demo.subtitle": "Connesso al server di casa",
+    "demo.status": "Protetto",
+    "demo.saved": "spazio recuperato",
+    "demo.file1": "Vacanze_2026.mov",
+    "demo.file1sub": "2,4 GB archiviati sul server",
+    "demo.tag": "verificato",
+    "demo.file2": "Ritratti.raw",
+    "demo.file2sub": "Ripristino su richiesta",
+    "demo.tag2": "mTLS",
+    "stat.one.value": "0 EUR",
+    "stat.one.label": "al mese, per sempre",
+    "stat.two.label": "ogni file verificato byte per byte",
+    "stat.three.label": "server e telefoni si autenticano a vicenda",
+    "stat.four.value": "100%",
+    "stat.four.label": "dati sotto il tuo controllo",
+    "flow.kicker": "Flusso",
+    "flow.title": "Meno spazio occupato, accesso preservato.",
+    "flow.sub": "ShadowFS lavora in background: individua i file usati di rado, li trasferisce, li verifica e lascia sul telefono un segnaposto leggero.",
+    "flow.code": "shadowfs scan --when-storage-low\n> found 148 cold files\n> upload over TLS 1.3 + mTLS\n> verify sha256 checksums\n> replace originals with verified placeholders\n> restore on demand when opened",
+    "flow.step1.title": "Rileva",
+    "flow.step1.body": "Quando lo spazio scende, cerca file grandi che non apri da giorni.",
+    "flow.step2.title": "Trasferisce",
+    "flow.step2.body": "Invia gli originali al server domestico su canale cifrato e riprendibile.",
+    "flow.step3.title": "Verifica",
+    "flow.step3.body": "Sostituisce il file locale solo dopo checksum corretto e conferma finale del server.",
+    "flow.step4.title": "Ripristina",
+    "flow.step4.body": "Quando apri un segnaposto, il file completo viene recuperato dal server.",
+    "features.kicker": "Per uso reale",
+    "features.title": "Pensato per telefoni pieni e reti imperfette.",
+    "features.sub": "Non e solo un uploader: gestisce abbinamento, ripresa dei trasferimenti, sincronizzazioni cloud e piu dispositivi.",
+    "features.one.title": "Abbinamento guidato",
+    "features.one.body": "Scansiona il QR del Raspberry: IP, porta e certificati vengono configurati in modo assistito.",
+    "features.two.title": "Ripresa automatica",
+    "features.two.body": "Se la rete si interrompe durante un file di grandi dimensioni, il trasferimento riparte dal punto corretto.",
+    "features.three.title": "Pronto per Tailscale",
+    "features.three.body": "Accedi al server di casa anche in 4G, senza aprire porte sul router.",
+    "features.four.title": "Controllo sync cloud",
+    "features.four.body": "Convive con Google Photos, Amazon Photos e servizi simili riducendo i cicli ripetuti di ripristino.",
+    "features.five.title": "Cartelle protette",
+    "features.five.body": "Documenti di lavoro, chat e directory delicate possono essere escluse dalla gestione automatica.",
+    "features.six.title": "Multi-dispositivo",
+    "features.six.body": "Ogni telefono ha certificati personali e uno spazio isolato sul server.",
+    "security.kicker": "Sicurezza",
+    "security.title": "Prima regola: non perdere mai un file.",
+    "security.sub": "La comodita ha valore solo se gli originali restano protetti. ShadowFS modifica il telefono solo dopo la conferma completa del server.",
+    "security.main.title": "Verifica prima della sostituzione",
+    "security.main.body": "Il file locale viene alleggerito solo dopo ricezione completa, SHA-256 verificato, salvataggio su disco e ACK finale.",
+    "security.check1": "Nessuna conferma, nessuna modifica locale.",
+    "security.check2": "File temporanei per upload e download incompleti.",
+    "security.check3": "Namespace isolato per ogni dispositivo.",
+    "security.card1.title": "TLS 1.3 + mTLS",
+    "security.card1.body": "Il telefono verifica il server e il server accetta solo telefoni con certificato firmato dalla tua CA privata.",
+    "security.card2.title": "Abbinamento monouso",
+    "security.card2.body": "Il QR scade in pochi minuti e vale una sola volta, con token casuale ad alta entropia.",
+    "security.card3.title": "Percorsi server protetti",
+    "security.card3.body": "I percorsi sono validati sul server per impedire richieste fuori dallo storage dedicato.",
+    "security.card4.title": "Cloud sync controllato",
+    "security.card4.body": "Limiti e rilevamento loop impediscono idratazioni automatiche infinite.",
+    "compare.kicker": "Confronto",
+    "compare.title": "Il comfort del cloud, con il controllo di casa.",
+    "compare.col1": "Tema",
+    "compare.col3": "Cloud tradizionale",
+    "compare.row1.key": "Dove stanno i file",
+    "compare.row1.a": "Sul tuo Raspberry Pi, NAS o server Linux domestico.",
+    "compare.row1.b": "Su infrastruttura di terzi, con regole e prezzi loro.",
+    "compare.row2.key": "Costo",
+    "compare.row2.a": "Nessun canone ShadowFS: usi hardware e disco che possiedi.",
+    "compare.row2.b": "Abbonamento ricorrente quando la libreria cresce.",
+    "compare.row3.key": "Accesso remoto",
+    "compare.row3.a": "Indicato per una rete privata come Tailscale.",
+    "compare.row3.b": "Sempre mediato dal provider.",
+    "compare.row4.key": "Verifica",
+    "compare.row4.a": "Checksum SHA-256 prima di toccare il file locale.",
+    "compare.row4.b": "Garanzie meno verificabili e dipendenti dal servizio.",
+    "start.kicker": "Primo avvio",
+    "start.title": "Pronto in pochi passaggi.",
+    "start.body": "Installa il daemon sul Raspberry o su un server Linux, avvia l'app Android e abbina il dispositivo con codice QR.",
+    "start.github": "Apri su GitHub",
+    "start.manual": "Manuale utente",
+    "start.steps.title": "Passaggi principali",
+    "start.step1": "Esegui il programma di installazione in `shadow_daemon` sul server domestico.",
+    "start.step2": "Apri l'app Android e scansiona il QR di abbinamento.",
+    "start.step3": "Scegli le cartelle protette e lascia ShadowFS in background.",
+    "faq.kicker": "FAQ",
+    "faq.title": "Risposte chiare.",
+    "faq.one.q": "Come proteggete i miei file?",
+    "faq.one.a": "ShadowFS non svuota l'originale finche il server non conferma ricezione, checksum e salvataggio. Per i file insostituibili resta comunque consigliato un backup del server.",
+    "faq.two.q": "Quanto spazio posso liberare?",
+    "faq.two.a": "Dipende dalla libreria: video, foto RAW, PDF e archivi vecchi possono liberare decine di GB lasciando anteprime leggere sul telefono.",
+    "faq.three.q": "Funziona fuori casa?",
+    "faq.three.a": "Si, usando una rete privata come Tailscale il telefono puo raggiungere il server anche da 4G o da un altro Wi-Fi.",
+    "faq.four.q": "Servono competenze tecniche?",
+    "faq.four.a": "Serve familiarita minima con il terminale sul server. Lato telefono il pairing guidato via QR evita configurazioni manuali lunghe.",
+    "faq.five.q": "Devo mantenere un backup?",
+    "faq.five.a": "Si. ShadowFS verifica i trasferimenti prima di modificare i file locali, ma non sostituisce una strategia di backup. Usalo prima con file non critici e mantieni una copia separata dei dati importanti.",
+    "faq.six.q": "Cosa succede se il server e spento?",
+    "faq.six.a": "ShadowFS non modifica i file locali se il server non e raggiungibile. I trasferimenti restano in attesa o riprendono quando la connessione torna disponibile.",
+    "faq.seven.q": "Posso usare Google Photos o OneDrive?",
+    "faq.seven.a": "Si, ma e meglio evitare che due servizi gestiscano la stessa cartella. Puoi proteggere DCIM, WhatsApp o cartelle cloud e usare ShadowFS per download, video grandi, PDF e archivi.",
+    "faq.eight.q": "Se elimino un file dal telefono, viene eliminato anche dal server?",
+    "faq.eight.a": "No, non automaticamente. La copia sul server resta finche non decidi di pulire gli orfani dalla lista dei file gestiti.",
+    "faq.nine.q": "I miei file passano dai vostri server?",
+    "faq.nine.a": "No. ShadowFS comunica tra il tuo telefono e il tuo server domestico. Il progetto non richiede un account ShadowFS e non ospita i tuoi file.",
+    "faq.ten.q": "Quanto costa usarlo?",
+    "faq.ten.a": "ShadowFS non prevede abbonamenti. Usi il tuo hardware e il tuo disco. Restano eventuali costi personali, come corrente, storage, rete o servizi esterni che scegli di usare.",
+    "footer.tagline": "Perche i tuoi file sono tuoi.",
+    "footer.disclaimer": "Progetto in fase di test sul campo: non ancora un prodotto consumer rifinito, da non usare come unica copia di file importanti. Software fornito senza garanzie. Mantieni sempre un backup dei file importanti.",
+    "footer.install": "Installazione",
+    "footer.security": "Sicurezza",
+    "footer.contribute": "Sostieni il progetto",
+    "modal.kicker": "Documento",
+    "modal.loading": "Caricamento...",
+    "modal.error": "Non riesco a caricare il documento qui. Puoi aprirlo dal link originale.",
+    "modal.close": "Chiudi",
+    "back.top": "Torna su"
+  },
+  en: {
+    "meta.title": "ShadowFS | Free your phone. Keep your files yours.",
+    "meta.description": "ShadowFS frees Android storage by safely moving inactive photos, videos and documents to your Raspberry Pi or home server. Self-hosted, mTLS, no subscriptions.",
+    "auto": "Auto: English",
+    "nav.flow": "How it works",
+    "nav.features": "Features",
+    "nav.security": "Security",
+    "nav.faq": "FAQ",
+    "nav.start": "Start",
+    "hero.eyebrow": "Android + Raspberry Pi, without third-party cloud",
+    "hero.subtitle": "Free phone storage by moving inactive photos, videos and documents to your home server. Cloud comfort, but <strong>your files stay yours</strong>.",
+    "hero.primary": "Installation guide",
+    "hero.secondary": "Overview",
+    "hero.note1": "Open source",
+    "hero.note2": "Self-hosted",
+    "hero.note3": "TLS 1.3 + mTLS",
+    "hero.note4": "No subscriptions",
+    "hero.note5": "In field testing",
+    "demo.title": "Android phone",
+    "demo.subtitle": "Connected to the home server",
+    "demo.status": "Protected",
+    "demo.saved": "space recovered",
+    "demo.file1": "Holiday_2026.mov",
+    "demo.file1sub": "2.4 GB stored on the server",
+    "demo.tag": "verified",
+    "demo.file2": "Portraits.raw",
+    "demo.file2sub": "On-demand restore",
+    "demo.tag2": "mTLS",
+    "stat.one.value": "$0",
+    "stat.one.label": "per month, forever",
+    "stat.two.label": "every file verified byte by byte",
+    "stat.three.label": "server and phones authenticate each other",
+    "stat.four.value": "100%",
+    "stat.four.label": "data under your control",
+    "flow.kicker": "Flow",
+    "flow.title": "Less storage used. Access preserved.",
+    "flow.sub": "ShadowFS works in the background: it identifies rarely used files, transfers them, verifies them and leaves a lightweight placeholder on your phone.",
+    "flow.code": "shadowfs scan --when-storage-low\n> found 148 cold files\n> upload over TLS 1.3 + mTLS\n> verify sha256 checksums\n> replace originals with verified placeholders\n> restore on demand when opened",
+    "flow.step1.title": "Detect",
+    "flow.step1.body": "When storage runs low, it finds large files you have not opened for days.",
+    "flow.step2.title": "Transfer",
+    "flow.step2.body": "It sends originals to your home server over an encrypted, resumable channel.",
+    "flow.step3.title": "Verify",
+    "flow.step3.body": "It replaces the local file only after a valid checksum and final server confirmation.",
+    "flow.step4.title": "Restore",
+    "flow.step4.body": "When you open a placeholder, the full file is restored from the server.",
+    "features.kicker": "Built for real life",
+    "features.title": "Made for full phones and imperfect networks.",
+    "features.sub": "It is not just an uploader: it handles pairing, transfer resume, cloud sync behavior and multiple devices.",
+    "features.one.title": "Guided pairing",
+    "features.one.body": "Scan the Raspberry Pi QR code: IP, port and certificates configure themselves.",
+    "features.two.title": "Automatic resume",
+    "features.two.body": "If the network drops during a large file, transfer resumes from the correct point.",
+    "features.three.title": "Ready for Tailscale",
+    "features.three.body": "Access the home server over 4G without opening router ports.",
+    "features.four.title": "Cloud sync control",
+    "features.four.body": "Coexists with Google Photos, Amazon Photos and similar services while reducing repeated restore loops.",
+    "features.five.title": "Protected folders",
+    "features.five.body": "Work docs, chats and sensitive directories can be excluded from automatic management.",
+    "features.six.title": "Multi-device",
+    "features.six.body": "Every phone gets personal certificates and isolated server storage.",
+    "security.kicker": "Security",
+    "security.title": "First rule: never lose a file.",
+    "security.sub": "Convenience matters only when originals remain protected. ShadowFS changes the phone only after complete server confirmation.",
+    "security.main.title": "Verification before replacement",
+    "security.main.body": "The local file is lightened only after full receipt, verified SHA-256, disk save and final ACK.",
+    "security.check1": "No confirmation, no local change.",
+    "security.check2": "Temporary files for incomplete uploads and downloads.",
+    "security.check3": "Isolated namespace for each device.",
+    "security.card1.title": "TLS 1.3 + mTLS",
+    "security.card1.body": "The phone verifies the server and the server accepts only phones with certificates signed by your private CA.",
+    "security.card2.title": "One-shot pairing",
+    "security.card2.body": "The QR expires in minutes, works once, and uses a high-entropy random token.",
+    "security.card3.title": "Protected server paths",
+    "security.card3.body": "Server paths are validated to prevent requests outside dedicated storage.",
+    "security.card4.title": "Controlled cloud sync",
+    "security.card4.body": "Limits and loop detection prevent infinite automatic hydrations.",
+    "compare.kicker": "Comparison",
+    "compare.title": "Cloud comfort, home control.",
+    "compare.col1": "Topic",
+    "compare.col3": "Traditional cloud",
+    "compare.row1.key": "File location",
+    "compare.row1.a": "On your Raspberry Pi, NAS or home Linux server.",
+    "compare.row1.b": "On third-party infrastructure, with their rules and pricing.",
+    "compare.row2.key": "Cost",
+    "compare.row2.a": "No ShadowFS fee: use hardware and storage you own.",
+    "compare.row2.b": "Recurring subscription as your library grows.",
+    "compare.row3.key": "Remote access",
+    "compare.row3.a": "Well suited to a private network like Tailscale.",
+    "compare.row3.b": "Always mediated by the provider.",
+    "compare.row4.key": "Verification",
+    "compare.row4.a": "SHA-256 checksum before touching the local file.",
+    "compare.row4.b": "Less verifiable guarantees that depend on the service.",
+    "start.kicker": "First run",
+    "start.title": "Ready in a few guided steps.",
+    "start.body": "Install the daemon on a Raspberry Pi or Linux server, open the Android app and pair the device with a QR code.",
+    "start.github": "Open on GitHub",
+    "start.manual": "User manual",
+    "start.steps.title": "Main steps",
+    "start.step1": "Run the installer in `shadow_daemon` on your home server.",
+    "start.step2": "Open the Android app and scan the pairing QR.",
+    "start.step3": "Choose protected folders and let ShadowFS work in the background.",
+    "faq.kicker": "FAQ",
+    "faq.title": "Clear answers.",
+    "faq.one.q": "How are my files protected?",
+    "faq.one.a": "ShadowFS does not lighten the original until the server confirms receipt, checksum and disk save. For irreplaceable files, a server backup is still recommended.",
+    "faq.two.q": "How much space can I free?",
+    "faq.two.a": "It depends on your library: videos, RAW photos, PDFs and old archives can free tens of GB while leaving lightweight previews on the phone.",
+    "faq.three.q": "Does it work away from home?",
+    "faq.three.a": "Yes. With a private network like Tailscale, your phone can reach the server over 4G or another Wi-Fi.",
+    "faq.four.q": "Do I need technical skills?",
+    "faq.four.a": "You need minimal terminal familiarity on the server. On the phone, guided QR pairing avoids long manual setup.",
+    "faq.five.q": "Should I keep a backup?",
+    "faq.five.a": "Yes. ShadowFS verifies transfers before changing local files, but it does not replace a backup strategy. Test it first with non-critical files and keep a separate copy of important data.",
+    "faq.six.q": "What happens if the server is offline?",
+    "faq.six.a": "ShadowFS does not change local files if the server cannot be reached. Transfers wait or resume when the connection is available again.",
+    "faq.seven.q": "Can I use Google Photos or OneDrive?",
+    "faq.seven.a": "Yes, but avoid letting two services manage the same folder. You can protect DCIM, WhatsApp or cloud folders and use ShadowFS for downloads, large videos, PDFs and archives.",
+    "faq.eight.q": "If I delete a file from the phone, is it deleted from the server too?",
+    "faq.eight.a": "No, not automatically. The server copy remains until you choose to clean orphaned files from the managed-file list.",
+    "faq.nine.q": "Do my files pass through your servers?",
+    "faq.nine.a": "No. ShadowFS communicates between your phone and your home server. The project does not require a ShadowFS account and does not host your files.",
+    "faq.ten.q": "How much does it cost?",
+    "faq.ten.a": "ShadowFS has no subscription. You use your own hardware and disk. Personal costs may still apply, such as power, storage, network access or external services you choose to use.",
+    "footer.tagline": "Because your files are yours.",
+    "footer.disclaimer": "Project in field testing: not yet a polished consumer product, do not use it as the only copy of important files. Software provided without warranties. Always keep a backup of important files.",
+    "footer.install": "Installation",
+    "footer.security": "Security",
+    "footer.contribute": "Support the project",
+    "modal.kicker": "Document",
+    "modal.loading": "Loading...",
+    "modal.error": "I cannot load this document here. You can open it from the original link.",
+    "modal.close": "Close",
+    "back.top": "Back to top"
+  },
+  es: {
+    "meta.title": "ShadowFS | Libera tu telefono. Tus archivos siguen siendo tuyos.",
+    "meta.description": "ShadowFS libera espacio en Android moviendo fotos, videos y documentos inactivos a tu Raspberry Pi o servidor domestico. Self-hosted, mTLS, sin suscripciones.",
+    "auto": "Auto: Espanol",
+    "nav.flow": "Como funciona",
+    "nav.features": "Funciones",
+    "nav.security": "Seguridad",
+    "nav.faq": "FAQ",
+    "nav.start": "Empezar",
+    "hero.eyebrow": "Android + Raspberry Pi, sin nube de terceros",
+    "hero.subtitle": "Libera espacio moviendo fotos, videos y documentos inactivos a tu servidor domestico. Comodidad de nube, pero <strong>tus archivos siguen siendo tuyos</strong>.",
+    "hero.primary": "Guia de instalacion",
+    "hero.secondary": "Resumen",
+    "hero.note1": "Open source",
+    "hero.note2": "Self-hosted",
+    "hero.note3": "TLS 1.3 + mTLS",
+    "hero.note4": "Sin suscripciones",
+    "hero.note5": "En pruebas de campo",
+    "demo.title": "Telefono Android",
+    "demo.subtitle": "Conectado al servidor domestico",
+    "demo.status": "Protegido",
+    "demo.saved": "espacio recuperado",
+    "demo.file1": "Vacaciones_2026.mov",
+    "demo.file1sub": "2,4 GB guardados en el servidor",
+    "demo.tag": "verificado",
+    "demo.file2": "Retratos.raw",
+    "demo.file2sub": "Restauracion bajo demanda",
+    "demo.tag2": "mTLS",
+    "stat.one.value": "0 EUR",
+    "stat.one.label": "al mes, para siempre",
+    "stat.two.label": "cada archivo verificado byte a byte",
+    "stat.three.label": "servidor y telefonos se autentican mutuamente",
+    "stat.four.value": "100%",
+    "stat.four.label": "datos bajo tu control",
+    "flow.kicker": "Flujo",
+    "flow.title": "Menos espacio ocupado, acceso preservado.",
+    "flow.sub": "ShadowFS trabaja en segundo plano: identifica archivos poco usados, los transfiere, los verifica y deja un marcador ligero en el telefono.",
+    "flow.code": "shadowfs scan --when-storage-low\n> found 148 cold files\n> upload over TLS 1.3 + mTLS\n> verify sha256 checksums\n> replace originals with verified placeholders\n> restore on demand when opened",
+    "flow.step1.title": "Detecta",
+    "flow.step1.body": "Cuando baja el espacio, busca archivos grandes que no abres desde hace dias.",
+    "flow.step2.title": "Transfiere",
+    "flow.step2.body": "Envia los originales al servidor domestico por un canal cifrado y reanudable.",
+    "flow.step3.title": "Verifica",
+    "flow.step3.body": "Sustituye el archivo local solo despues de un checksum correcto y confirmacion final del servidor.",
+    "flow.step4.title": "Restaura",
+    "flow.step4.body": "Al abrir un marcador, el archivo completo se recupera desde el servidor.",
+    "features.kicker": "Para uso real",
+    "features.title": "Hecho para telefonos llenos y redes imperfectas.",
+    "features.sub": "No es solo un uploader: gestiona emparejamiento, reanudacion de transferencias, sincronizacion cloud y varios dispositivos.",
+    "features.one.title": "Emparejamiento guiado",
+    "features.one.body": "Escaneas el QR del Raspberry: IP, puerto y certificados se configuran solos.",
+    "features.two.title": "Reanudacion automatica",
+    "features.two.body": "Si la red se interrumpe durante un archivo grande, la transferencia sigue desde el punto correcto.",
+    "features.three.title": "Listo para Tailscale",
+    "features.three.body": "Accede al servidor domestico en 4G sin abrir puertos del router.",
+    "features.four.title": "Control de sync cloud",
+    "features.four.body": "Convive con Google Photos, Amazon Photos y servicios similares reduciendo ciclos repetidos de restauracion.",
+    "features.five.title": "Carpetas protegidas",
+    "features.five.body": "Documentos de trabajo, chats y carpetas sensibles pueden quedar siempre intactos.",
+    "features.six.title": "Multi-dispositivo",
+    "features.six.body": "Cada telefono tiene certificados personales y almacenamiento aislado.",
+    "security.kicker": "Seguridad",
+    "security.title": "Primera regla: no perder nunca un archivo.",
+    "security.sub": "La comodidad solo tiene valor si los originales permanecen protegidos. ShadowFS cambia el telefono solo tras confirmacion completa del servidor.",
+    "security.main.title": "Verificacion antes de sustituir",
+    "security.main.body": "El archivo local se aligera solo tras recepcion completa, SHA-256 verificado, guardado en disco y ACK final.",
+    "security.check1": "Sin confirmacion, no hay cambio local.",
+    "security.check2": "Archivos temporales para subidas y descargas incompletas.",
+    "security.check3": "Namespace aislado para cada dispositivo.",
+    "security.card1.title": "TLS 1.3 + mTLS",
+    "security.card1.body": "El telefono verifica el servidor y el servidor acepta solo telefonos con certificado firmado por tu CA privada.",
+    "security.card2.title": "Emparejamiento de un solo uso",
+    "security.card2.body": "El QR caduca en minutos y funciona una sola vez, con token aleatorio de alta entropia.",
+    "security.card3.title": "Rutas de servidor protegidas",
+    "security.card3.body": "Las rutas se validan en el servidor para impedir solicitudes fuera del almacenamiento dedicado.",
+    "security.card4.title": "Cloud sync controlado",
+    "security.card4.body": "Limites y deteccion de bucles evitan hidrataciones automaticas infinitas.",
+    "compare.kicker": "Comparacion",
+    "compare.title": "Comodidad de nube, control de casa.",
+    "compare.col1": "Tema",
+    "compare.col3": "Nube tradicional",
+    "compare.row1.key": "Donde estan los archivos",
+    "compare.row1.a": "En tu Raspberry Pi, NAS o servidor Linux domestico.",
+    "compare.row1.b": "En infraestructura de terceros, con sus reglas y precios.",
+    "compare.row2.key": "Costo",
+    "compare.row2.a": "Sin cuota ShadowFS: usas hardware y disco propios.",
+    "compare.row2.b": "Suscripcion recurrente cuando crece la biblioteca.",
+    "compare.row3.key": "Acceso remoto",
+    "compare.row3.a": "Adecuado para una red privada como Tailscale.",
+    "compare.row3.b": "Siempre mediado por el proveedor.",
+    "compare.row4.key": "Verificacion",
+    "compare.row4.a": "Checksum SHA-256 antes de tocar el archivo local.",
+    "compare.row4.b": "Garantias menos verificables y dependientes del servicio.",
+    "start.kicker": "Primer inicio",
+    "start.title": "Listo en pocos pasos guiados.",
+    "start.body": "Instala el daemon en Raspberry o un servidor Linux, abre la app Android y empareja el dispositivo con QR.",
+    "start.github": "Abrir en GitHub",
+    "start.manual": "Manual de usuario",
+    "start.steps.title": "Pasos principales",
+    "start.step1": "Ejecuta el instalador en `shadow_daemon` en tu servidor domestico.",
+    "start.step2": "Abre la app Android y escanea el QR de emparejamiento.",
+    "start.step3": "Elige carpetas protegidas y deja ShadowFS en segundo plano.",
+    "faq.kicker": "FAQ",
+    "faq.title": "Respuestas claras.",
+    "faq.one.q": "Como se protegen mis archivos?",
+    "faq.one.a": "ShadowFS no aligera el original hasta que el servidor confirma recepcion, checksum y guardado. Para archivos irreemplazables, conviene respaldar el servidor.",
+    "faq.two.q": "Cuanto espacio puedo liberar?",
+    "faq.two.a": "Depende de la biblioteca: videos, RAW, PDF y archivos antiguos pueden liberar decenas de GB dejando previews ligeras.",
+    "faq.three.q": "Funciona fuera de casa?",
+    "faq.three.a": "Si. Con una red privada como Tailscale, el telefono puede llegar al servidor por 4G u otro Wi-Fi.",
+    "faq.four.q": "Necesito competencias tecnicas?",
+    "faq.four.a": "Necesitas familiaridad minima con terminal en el servidor. En el telefono, el pairing QR guiado evita configuraciones largas.",
+    "faq.five.q": "Debo mantener una copia de seguridad?",
+    "faq.five.a": "Si. ShadowFS verifica las transferencias antes de cambiar archivos locales, pero no sustituye una estrategia de backup. Pruebalo primero con archivos no criticos y conserva una copia separada de los datos importantes.",
+    "faq.six.q": "Que pasa si el servidor esta apagado?",
+    "faq.six.a": "ShadowFS no cambia archivos locales si el servidor no esta disponible. Las transferencias quedan en espera o se reanudan cuando vuelve la conexion.",
+    "faq.seven.q": "Puedo usar Google Photos u OneDrive?",
+    "faq.seven.a": "Si, pero conviene evitar que dos servicios gestionen la misma carpeta. Puedes proteger DCIM, WhatsApp o carpetas cloud y usar ShadowFS para descargas, videos grandes, PDF y archivos.",
+    "faq.eight.q": "Si borro un archivo del telefono, se borra tambien del servidor?",
+    "faq.eight.a": "No, no automaticamente. La copia del servidor permanece hasta que decidas limpiar los archivos huerfanos desde la lista de archivos gestionados.",
+    "faq.nine.q": "Mis archivos pasan por vuestros servidores?",
+    "faq.nine.a": "No. ShadowFS comunica tu telefono con tu servidor domestico. El proyecto no requiere una cuenta ShadowFS y no aloja tus archivos.",
+    "faq.ten.q": "Cuanto cuesta usarlo?",
+    "faq.ten.a": "ShadowFS no tiene suscripcion. Usas tu hardware y tu disco. Pueden existir costes personales, como electricidad, almacenamiento, red o servicios externos que decidas usar.",
+    "footer.tagline": "Porque tus archivos son tuyos.",
+    "footer.disclaimer": "Proyecto en pruebas de campo: aun no es un producto de consumo pulido, no lo uses como unica copia de archivos importantes. Software proporcionado sin garantias. Manten siempre una copia de seguridad de los archivos importantes.",
+    "footer.install": "Instalacion",
+    "footer.security": "Seguridad",
+    "footer.contribute": "Apoyar el proyecto",
+    "modal.kicker": "Documento",
+    "modal.loading": "Cargando...",
+    "modal.error": "No puedo cargar este documento aqui. Puedes abrirlo desde el enlace original.",
+    "modal.close": "Cerrar",
+    "back.top": "Volver arriba"
+  },
+  fr: {
+    "meta.title": "ShadowFS | Liberez votre telephone. Vos fichiers restent a vous.",
+    "meta.description": "ShadowFS libere du stockage Android en deplacant photos, videos et documents inactifs vers votre Raspberry Pi ou serveur maison. Self-hosted, mTLS, sans abonnement.",
+    "auto": "Auto: Francais",
+    "nav.flow": "Fonctionnement",
+    "nav.features": "Fonctions",
+    "nav.security": "Securite",
+    "nav.faq": "FAQ",
+    "nav.start": "Demarrer",
+    "hero.eyebrow": "Android + Raspberry Pi, sans cloud tiers",
+    "hero.subtitle": "Liberez de l'espace en deplacant photos, videos et documents inactifs vers votre serveur maison. Le confort du cloud, mais <strong>vos fichiers restent a vous</strong>.",
+    "hero.primary": "Guide d'installation",
+    "hero.secondary": "Vue d'ensemble",
+    "hero.note1": "Open source",
+    "hero.note2": "Self-hosted",
+    "hero.note3": "TLS 1.3 + mTLS",
+    "hero.note4": "Sans abonnement",
+    "hero.note5": "En test sur le terrain",
+    "demo.title": "Telephone Android",
+    "demo.subtitle": "Connecte au serveur maison",
+    "demo.status": "Protege",
+    "demo.saved": "espace recupere",
+    "demo.file1": "Vacances_2026.mov",
+    "demo.file1sub": "2,4 Go stockes sur le serveur",
+    "demo.tag": "verifie",
+    "demo.file2": "Portraits.raw",
+    "demo.file2sub": "Restauration a la demande",
+    "demo.tag2": "mTLS",
+    "stat.one.value": "0 EUR",
+    "stat.one.label": "par mois, pour toujours",
+    "stat.two.label": "chaque fichier verifie octet par octet",
+    "stat.three.label": "serveur et telephones s'authentifient mutuellement",
+    "stat.four.value": "100%",
+    "stat.four.label": "donnees sous votre controle",
+    "flow.kicker": "Flux",
+    "flow.title": "Moins d'espace utilise, acces preserve.",
+    "flow.sub": "ShadowFS travaille en arriere-plan: il identifie les fichiers peu utilises, les transfere, les verifie et laisse un marqueur leger sur le telephone.",
+    "flow.code": "shadowfs scan --when-storage-low\n> found 148 cold files\n> upload over TLS 1.3 + mTLS\n> verify sha256 checksums\n> replace originals with verified placeholders\n> restore on demand when opened",
+    "flow.step1.title": "Detecte",
+    "flow.step1.body": "Quand l'espace baisse, il cherche les gros fichiers non ouverts depuis des jours.",
+    "flow.step2.title": "Transfere",
+    "flow.step2.body": "Il envoie les originaux au serveur maison via un canal chiffre et reprenable.",
+    "flow.step3.title": "Verifie",
+    "flow.step3.body": "Il remplace le fichier local seulement apres checksum valide et confirmation finale du serveur.",
+    "flow.step4.title": "Restaure",
+    "flow.step4.body": "Quand vous ouvrez un marqueur, le fichier complet est recupere depuis le serveur.",
+    "features.kicker": "Usage reel",
+    "features.title": "Fait pour telephones pleins et reseaux imparfaits.",
+    "features.sub": "Ce n'est pas seulement un uploader: association, reprise des transferts, synchronisation cloud et multi-appareils sont geres.",
+    "features.one.title": "Association guidee",
+    "features.one.body": "Scannez le QR du Raspberry: IP, port et certificats se configurent seuls.",
+    "features.two.title": "Reprise automatique",
+    "features.two.body": "Si le reseau s'interrompt pendant un gros fichier, le transfert reprend au bon endroit.",
+    "features.three.title": "Pret pour Tailscale",
+    "features.three.body": "Accedez au serveur maison en 4G sans ouvrir de ports routeur.",
+    "features.four.title": "Controle sync cloud",
+    "features.four.body": "Coexiste avec Google Photos, Amazon Photos et services similaires en reduisant les cycles repetes de restauration.",
+    "features.five.title": "Dossiers proteges",
+    "features.five.body": "Documents de travail, chats et dossiers sensibles peuvent etre exclus de la gestion automatique.",
+    "features.six.title": "Multi-appareil",
+    "features.six.body": "Chaque telephone recoit ses certificats et un espace serveur isole.",
+    "security.kicker": "Securite",
+    "security.title": "Premiere regle: ne jamais perdre un fichier.",
+    "security.sub": "La commodite n'a de valeur que si les originaux restent proteges. ShadowFS modifie le telephone seulement apres confirmation complete du serveur.",
+    "security.main.title": "Verification avant remplacement",
+    "security.main.body": "Le fichier local est allege seulement apres reception complete, SHA-256 verifie, sauvegarde disque et ACK final.",
+    "security.check1": "Pas de confirmation, pas de changement local.",
+    "security.check2": "Fichiers temporaires pour transferts incomplets.",
+    "security.check3": "Namespace isole pour chaque appareil.",
+    "security.card1.title": "TLS 1.3 + mTLS",
+    "security.card1.body": "Le telephone verifie le serveur et le serveur accepte seulement les telephones signes par votre CA privee.",
+    "security.card2.title": "Association a usage unique",
+    "security.card2.body": "Le QR expire en quelques minutes, fonctionne une fois et utilise un token aleatoire haute entropie.",
+    "security.card3.title": "Chemins serveur proteges",
+    "security.card3.body": "Les chemins serveur sont valides pour empecher les requetes hors stockage dedie.",
+    "security.card4.title": "Cloud sync controle",
+    "security.card4.body": "Limites et detection de boucles evitent les hydratations automatiques infinies.",
+    "compare.kicker": "Comparaison",
+    "compare.title": "Le confort du cloud, le controle de la maison.",
+    "compare.col1": "Sujet",
+    "compare.col3": "Cloud traditionnel",
+    "compare.row1.key": "Emplacement",
+    "compare.row1.a": "Sur votre Raspberry Pi, NAS ou serveur Linux maison.",
+    "compare.row1.b": "Sur infrastructure tierce, avec leurs regles et prix.",
+    "compare.row2.key": "Cout",
+    "compare.row2.a": "Aucun frais ShadowFS: vous utilisez votre materiel et disque.",
+    "compare.row2.b": "Abonnement recurrent quand la bibliotheque grossit.",
+    "compare.row3.key": "Acces distant",
+    "compare.row3.a": "Adapte a un reseau prive comme Tailscale.",
+    "compare.row3.b": "Toujours medie par le fournisseur.",
+    "compare.row4.key": "Verification",
+    "compare.row4.a": "Checksum SHA-256 avant de toucher le fichier local.",
+    "compare.row4.b": "Garanties moins verifiables et dependantes du service.",
+    "start.kicker": "Premier lancement",
+    "start.title": "Pret en quelques etapes guidees.",
+    "start.body": "Installez le daemon sur Raspberry ou serveur Linux, ouvrez l'app Android et associez l'appareil par QR.",
+    "start.github": "Ouvrir sur GitHub",
+    "start.manual": "Manuel utilisateur",
+    "start.steps.title": "Etapes principales",
+    "start.step1": "Lancez l'installer dans `shadow_daemon` sur votre serveur maison.",
+    "start.step2": "Ouvrez l'app Android et scannez le QR d'association.",
+    "start.step3": "Choisissez les dossiers proteges et laissez ShadowFS en arriere-plan.",
+    "faq.kicker": "FAQ",
+    "faq.title": "Reponses claires.",
+    "faq.one.q": "Comment mes fichiers sont-ils proteges?",
+    "faq.one.a": "ShadowFS n'allege pas l'original tant que le serveur ne confirme pas reception, checksum et sauvegarde. Pour les fichiers irremplacables, sauvegardez aussi le serveur.",
+    "faq.two.q": "Combien d'espace puis-je liberer?",
+    "faq.two.a": "Cela depend: videos, RAW, PDF et archives anciennes peuvent liberer des dizaines de Go avec des apercus legers.",
+    "faq.three.q": "Ca marche hors de la maison?",
+    "faq.three.a": "Oui. Avec un reseau prive comme Tailscale, le telephone rejoint le serveur en 4G ou autre Wi-Fi.",
+    "faq.four.q": "Faut-il des competences techniques?",
+    "faq.four.a": "Une familiarite minimale avec le terminal cote serveur suffit. Sur telephone, le pairing QR guide evite les longues configurations.",
+    "faq.five.q": "Faut-il conserver une sauvegarde?",
+    "faq.five.a": "Oui. ShadowFS verifie les transferts avant de modifier les fichiers locaux, mais ne remplace pas une strategie de sauvegarde. Testez-le d'abord avec des fichiers non critiques et conservez une copie separee des donnees importantes.",
+    "faq.six.q": "Que se passe-t-il si le serveur est eteint?",
+    "faq.six.a": "ShadowFS ne modifie pas les fichiers locaux si le serveur est inaccessible. Les transferts attendent ou reprennent quand la connexion revient.",
+    "faq.seven.q": "Puis-je utiliser Google Photos ou OneDrive?",
+    "faq.seven.a": "Oui, mais il vaut mieux eviter que deux services gerent le meme dossier. Vous pouvez proteger DCIM, WhatsApp ou les dossiers cloud et utiliser ShadowFS pour les telechargements, grosses videos, PDF et archives.",
+    "faq.eight.q": "Si je supprime un fichier du telephone, est-il aussi supprime du serveur?",
+    "faq.eight.a": "Non, pas automatiquement. La copie serveur reste jusqu'a ce que vous decidiez de nettoyer les fichiers orphelins depuis la liste des fichiers geres.",
+    "faq.nine.q": "Mes fichiers passent-ils par vos serveurs?",
+    "faq.nine.a": "Non. ShadowFS communique entre votre telephone et votre serveur maison. Le projet ne demande pas de compte ShadowFS et n'heberge pas vos fichiers.",
+    "faq.ten.q": "Combien cela coute-t-il?",
+    "faq.ten.a": "ShadowFS n'a pas d'abonnement. Vous utilisez votre materiel et votre disque. Des couts personnels peuvent exister: electricite, stockage, reseau ou services externes que vous choisissez.",
+    "footer.tagline": "Parce que vos fichiers sont a vous.",
+    "footer.disclaimer": "Projet en test sur le terrain : pas encore un produit grand public abouti, ne l'utilisez pas comme unique copie de fichiers importants. Logiciel fourni sans garantie. Conservez toujours une sauvegarde des fichiers importants.",
+    "footer.install": "Installation",
+    "footer.security": "Securite",
+    "footer.contribute": "Soutenir le projet",
+    "modal.kicker": "Document",
+    "modal.loading": "Chargement...",
+    "modal.error": "Impossible de charger ce document ici. Vous pouvez l'ouvrir depuis le lien original.",
+    "modal.close": "Fermer",
+    "back.top": "Retour en haut"
+  },
+  de: {
+    "meta.title": "ShadowFS | Entlastet dein Telefon. Deine Dateien bleiben bei dir.",
+    "meta.description": "ShadowFS schafft Speicherplatz auf Android, indem inaktive Fotos, Videos und Dokumente sicher auf deinen Raspberry Pi oder Heimserver verschoben werden. Self-hosted, mTLS, ohne Abo.",
+    "auto": "Auto: Deutsch",
+    "nav.flow": "Funktionsweise",
+    "nav.features": "Funktionen",
+    "nav.security": "Sicherheit",
+    "nav.faq": "FAQ",
+    "nav.start": "Starten",
+    "hero.eyebrow": "Android + Raspberry Pi, ohne Drittanbieter-Cloud",
+    "hero.subtitle": "Schaffe Speicherplatz auf dem Telefon, indem inaktive Fotos, Videos und Dokumente auf deinen Heimserver verschoben werden. Cloud-Komfort, aber <strong>deine Dateien bleiben bei dir</strong>.",
+    "hero.primary": "Installationsanleitung",
+    "hero.secondary": "Uebersicht",
+    "hero.note1": "Open source",
+    "hero.note2": "Self-hosted",
+    "hero.note3": "TLS 1.3 + mTLS",
+    "hero.note4": "Ohne Abo",
+    "hero.note5": "Im Feldtest",
+    "demo.title": "Android-Telefon",
+    "demo.subtitle": "Mit dem Heimserver verbunden",
+    "demo.status": "Geschuetzt",
+    "demo.saved": "Speicher freigegeben",
+    "demo.file1": "Urlaub_2026.mov",
+    "demo.file1sub": "2,4 GB auf dem Server gespeichert",
+    "demo.tag": "verifiziert",
+    "demo.file2": "Portraits.raw",
+    "demo.file2sub": "Wiederherstellung bei Bedarf",
+    "demo.tag2": "mTLS",
+    "stat.one.value": "0 EUR",
+    "stat.one.label": "pro Monat, dauerhaft",
+    "stat.two.label": "jede Datei bytegenau verifiziert",
+    "stat.three.label": "Server und Telefone authentifizieren sich gegenseitig",
+    "stat.four.value": "100%",
+    "stat.four.label": "Daten unter deiner Kontrolle",
+    "flow.kicker": "Ablauf",
+    "flow.title": "Weniger Speicher belegt, Zugriff bleibt erhalten.",
+    "flow.sub": "ShadowFS arbeitet im Hintergrund: Es erkennt selten genutzte Dateien, uebertraegt sie, verifiziert sie und laesst einen leichten Platzhalter auf dem Telefon.",
+    "flow.code": "shadowfs scan --when-storage-low\n> found 148 cold files\n> upload over TLS 1.3 + mTLS\n> verify sha256 checksums\n> replace originals with verified placeholders\n> restore on demand when opened",
+    "flow.step1.title": "Erkennen",
+    "flow.step1.body": "Wenn der Speicher knapp wird, sucht ShadowFS grosse Dateien, die seit Tagen nicht geoeffnet wurden.",
+    "flow.step2.title": "Uebertragen",
+    "flow.step2.body": "Originale werden ueber einen verschluesselten und fortsetzbaren Kanal an den Heimserver gesendet.",
+    "flow.step3.title": "Verifizieren",
+    "flow.step3.body": "Die lokale Datei wird erst nach korrektem Checksum und finaler Serverbestaetigung ersetzt.",
+    "flow.step4.title": "Wiederherstellen",
+    "flow.step4.body": "Wenn du einen Platzhalter oeffnest, wird die vollstaendige Datei vom Server wiederhergestellt.",
+    "features.kicker": "Praxisnah",
+    "features.title": "Fuer volle Telefone und unperfekte Netze.",
+    "features.sub": "ShadowFS ist mehr als ein Uploader: Es verwaltet Kopplung, Fortsetzung von Transfers, Cloud-Sync-Verhalten und mehrere Geraete.",
+    "features.one.title": "Gefuehrte Kopplung",
+    "features.one.body": "Scanne den QR-Code des Raspberry Pi: IP, Port und Zertifikate werden gefuehrt eingerichtet.",
+    "features.two.title": "Automatische Fortsetzung",
+    "features.two.body": "Wenn das Netzwerk bei einer grossen Datei abbricht, setzt der Transfer am richtigen Punkt fort.",
+    "features.three.title": "Bereit fuer Tailscale",
+    "features.three.body": "Greife auch ueber 4G auf den Heimserver zu, ohne Router-Ports zu oeffnen.",
+    "features.four.title": "Cloud-Sync-Kontrolle",
+    "features.four.body": "Funktioniert neben Google Photos, Amazon Photos und aehnlichen Diensten und reduziert wiederholte Restore-Schleifen.",
+    "features.five.title": "Geschuetzte Ordner",
+    "features.five.body": "Arbeitsdokumente, Chats und sensible Verzeichnisse koennen von der automatischen Verwaltung ausgeschlossen werden.",
+    "features.six.title": "Mehrere Geraete",
+    "features.six.body": "Jedes Telefon erhaelt eigene Zertifikate und isolierten Speicher auf dem Server.",
+    "security.kicker": "Sicherheit",
+    "security.title": "Erste Regel: keine Datei verlieren.",
+    "security.sub": "Komfort ist nur wertvoll, wenn Originale geschuetzt bleiben. ShadowFS aendert das Telefon erst nach vollstaendiger Serverbestaetigung.",
+    "security.main.title": "Verifizierung vor Ersetzung",
+    "security.main.body": "Die lokale Datei wird erst nach vollstaendigem Empfang, geprueftem SHA-256, Speicherung auf Disk und finalem ACK reduziert.",
+    "security.check1": "Keine Bestaetigung, keine lokale Aenderung.",
+    "security.check2": "Temporaere Dateien fuer unvollstaendige Uploads und Downloads.",
+    "security.check3": "Isolierter Namespace fuer jedes Geraet.",
+    "security.card1.title": "TLS 1.3 + mTLS",
+    "security.card1.body": "Das Telefon prueft den Server, und der Server akzeptiert nur Telefone mit Zertifikaten deiner privaten CA.",
+    "security.card2.title": "Einmalige Kopplung",
+    "security.card2.body": "Der QR-Code laeuft nach wenigen Minuten ab, funktioniert einmalig und nutzt einen zufaelligen Token mit hoher Entropie.",
+    "security.card3.title": "Geschuetzte Serverpfade",
+    "security.card3.body": "Serverpfade werden validiert, um Anfragen ausserhalb des dedizierten Speichers zu verhindern.",
+    "security.card4.title": "Kontrollierter Cloud-Sync",
+    "security.card4.body": "Limits und Schleifenerkennung verhindern endlose automatische Wiederherstellungen.",
+    "compare.kicker": "Vergleich",
+    "compare.title": "Cloud-Komfort, Kontrolle zu Hause.",
+    "compare.col1": "Thema",
+    "compare.col3": "Klassische Cloud",
+    "compare.row1.key": "Speicherort",
+    "compare.row1.a": "Auf deinem Raspberry Pi, NAS oder Linux-Heimserver.",
+    "compare.row1.b": "Auf Drittanbieter-Infrastruktur, mit deren Regeln und Preisen.",
+    "compare.row2.key": "Kosten",
+    "compare.row2.a": "Keine ShadowFS-Gebuehr: Du nutzt eigene Hardware und eigenen Speicher.",
+    "compare.row2.b": "Wiederkehrendes Abo, wenn deine Bibliothek waechst.",
+    "compare.row3.key": "Fernzugriff",
+    "compare.row3.a": "Gut geeignet fuer ein privates Netzwerk wie Tailscale.",
+    "compare.row3.b": "Immer ueber den Anbieter vermittelt.",
+    "compare.row4.key": "Verifizierung",
+    "compare.row4.a": "SHA-256-Checksum vor jeder Aenderung an der lokalen Datei.",
+    "compare.row4.b": "Weniger pruefbare Garantien, abhaengig vom Dienst.",
+    "start.kicker": "Erster Start",
+    "start.title": "In wenigen gefuehrten Schritten bereit.",
+    "start.body": "Installiere den Daemon auf Raspberry Pi oder Linux-Server, oeffne die Android-App und kopple das Geraet per QR-Code.",
+    "start.github": "Auf GitHub öffnen",
+    "start.manual": "Benutzerhandbuch",
+    "start.steps.title": "Wichtige Schritte",
+    "start.step1": "Fuehre den Installer in `shadow_daemon` auf deinem Heimserver aus.",
+    "start.step2": "Oeffne die Android-App und scanne den Kopplungs-QR.",
+    "start.step3": "Waehle geschuetzte Ordner und lasse ShadowFS im Hintergrund laufen.",
+    "faq.kicker": "FAQ",
+    "faq.title": "Klare Antworten.",
+    "faq.one.q": "Wie werden meine Dateien geschuetzt?",
+    "faq.one.a": "ShadowFS ersetzt das Original erst, wenn der Server Empfang, Checksum und Speicherung bestaetigt. Fuer unersetzliche Dateien bleibt ein Server-Backup empfohlen.",
+    "faq.two.q": "Wie viel Speicher kann ich freigeben?",
+    "faq.two.a": "Das haengt von deiner Bibliothek ab: Videos, RAW-Fotos, PDFs und alte Archive koennen viele GB freigeben, waehrend leichte Vorschauen auf dem Telefon bleiben.",
+    "faq.three.q": "Funktioniert es ausserhalb von zu Hause?",
+    "faq.three.a": "Ja. Mit einem privaten Netzwerk wie Tailscale erreicht dein Telefon den Server auch ueber 4G oder ein anderes Wi-Fi.",
+    "faq.four.q": "Brauche ich technische Kenntnisse?",
+    "faq.four.a": "Auf Serverseite reicht grundlegende Terminal-Erfahrung. Auf dem Telefon vermeidet die gefuehrte QR-Kopplung lange manuelle Konfiguration.",
+    "faq.five.q": "Sollte ich ein Backup behalten?",
+    "faq.five.a": "Ja. ShadowFS verifiziert Transfers vor lokalen Aenderungen, ersetzt aber keine Backup-Strategie. Teste es zuerst mit unkritischen Dateien und behalte eine separate Kopie wichtiger Daten.",
+    "faq.six.q": "Was passiert, wenn der Server ausgeschaltet ist?",
+    "faq.six.a": "ShadowFS aendert keine lokalen Dateien, wenn der Server nicht erreichbar ist. Transfers warten oder werden fortgesetzt, sobald die Verbindung wieder verfuegbar ist.",
+    "faq.seven.q": "Kann ich Google Photos oder OneDrive verwenden?",
+    "faq.seven.a": "Ja, aber zwei Dienste sollten nicht denselben Ordner verwalten. Du kannst DCIM, WhatsApp oder Cloud-Ordner schuetzen und ShadowFS fuer Downloads, grosse Videos, PDFs und Archive nutzen.",
+    "faq.eight.q": "Wenn ich eine Datei vom Telefon loesche, wird sie auch vom Server geloescht?",
+    "faq.eight.a": "Nein, nicht automatisch. Die Kopie auf dem Server bleibt, bis du verwaiste Dateien in der Liste der verwalteten Dateien bereinigst.",
+    "faq.nine.q": "Laufen meine Dateien ueber eure Server?",
+    "faq.nine.a": "Nein. ShadowFS kommuniziert zwischen deinem Telefon und deinem Heimserver. Das Projekt benoetigt kein ShadowFS-Konto und hostet deine Dateien nicht.",
+    "faq.ten.q": "Was kostet die Nutzung?",
+    "faq.ten.a": "ShadowFS hat kein Abo. Du nutzt eigene Hardware und eigenen Speicher. Persoenliche Kosten wie Strom, Speicher, Netzwerk oder externe Dienste koennen trotzdem anfallen.",
+    "footer.tagline": "Weil deine Dateien dir gehoeren.",
+    "footer.disclaimer": "Projekt im Feldtest: noch kein ausgereiftes Endkundenprodukt, nicht als einzige Kopie wichtiger Dateien verwenden. Software ohne Gewaehrleistung. Behalte immer ein Backup wichtiger Dateien.",
+    "footer.install": "Installation",
+    "footer.security": "Sicherheit",
+    "footer.contribute": "Projekt unterstuetzen",
+    "modal.kicker": "Dokument",
+    "modal.loading": "Wird geladen...",
+    "modal.error": "Dieses Dokument kann hier nicht geladen werden. Du kannst es ueber den Originallink oeffnen.",
+    "modal.close": "Schliessen",
+    "back.top": "Nach oben"
+  }
+};
+
+const supportedLanguages = Object.keys(translations);
+const languageSelect = document.getElementById("languageSelect");
+const autoBadge = document.getElementById("autoBadge");
+const docModal = document.getElementById("docModal");
+const docWindow = docModal.querySelector(".doc-window");
+const docTitle = document.getElementById("docTitle");
+const docContent = document.getElementById("docContent");
+const backTop = document.getElementById("backTop");
+const cursorGhost = document.getElementById("cursorGhost");
+
+function normalizeLanguage(value) {
+  if (!value) return "";
+  return String(value).toLowerCase().split("-")[0];
+}
+
+function detectLanguage() {
+  const urlLanguage = new URLSearchParams(window.location.search).get("lang");
+  const savedLanguage = localStorage.getItem("shadowfs.language");
+  const candidates = [
+    urlLanguage,
+    savedLanguage,
+    ...(navigator.languages || []),
+    navigator.language
+  ];
+  for (const candidate of candidates) {
+    const normalized = normalizeLanguage(candidate);
+    if (supportedLanguages.includes(normalized)) return normalized;
+  }
+  return "en";
+}
+
+function applyLanguage(language, persist) {
+  const lang = supportedLanguages.includes(language) ? language : "en";
+  const dict = translations[lang];
+  document.documentElement.lang = lang;
+  document.title = dict["meta.title"];
+  document.querySelector('meta[name="description"]').setAttribute("content", dict["meta.description"]);
+  document.querySelector('meta[property="og:title"]').setAttribute("content", dict["meta.title"]);
+  document.querySelector('meta[property="og:description"]').setAttribute("content", dict["meta.description"]);
+  document.querySelectorAll("[data-i18n]").forEach((node) => {
+    const value = dict[node.dataset.i18n];
+    if (value) node.textContent = value;
+  });
+  document.querySelectorAll("[data-i18n-html]").forEach((node) => {
+    const value = dict[node.dataset.i18nHtml];
+    if (value) node.innerHTML = value;
+  });
+  document.querySelectorAll("[data-i18n-label]").forEach((node) => {
+    const value = dict[node.dataset.i18nLabel];
+    if (value) node.setAttribute("aria-label", value);
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((node) => {
+    const value = dict[node.dataset.i18nTitle];
+    if (value) node.setAttribute("title", value);
+  });
+  languageSelect.value = lang;
+  autoBadge.textContent = dict.auto;
+  if (persist) localStorage.setItem("shadowfs.language", lang);
+}
+
+languageSelect.addEventListener("change", (event) => {
+  applyLanguage(event.target.value, true);
+});
+
+applyLanguage(detectLanguage(), false);
+
+function currentDictionary() {
+  return translations[languageSelect.value] || translations.en;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderInline(value) {
+  return escapeHtml(value)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+}
+
+function cleanMarkdown(markdown) {
+  return markdown
+    .replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, "# $1\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<a[^>]*>\s*<img[^>]*>\s*<\/a>/gi, "")
+    .replace(/<img[^>]*>/gi, "")
+    .replace(/<\/?p[^>]*>/gi, "\n")
+    .replace(/<\/?[^>]+>/g, "")
+    .replace(/&mdash;/g, "-")
+    .replace(/&nbsp;/g, " ");
+}
+
+function renderMarkdown(markdown) {
+  const lines = cleanMarkdown(markdown).split(/\r?\n/);
+  const html = [];
+  let inCode = false;
+  let codeLines = [];
+  let inList = false;
+  let listType = "ul";
+
+  function closeList() {
+    if (inList) {
+      html.push(`</${listType}>`);
+      inList = false;
+    }
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    const line = rawLine.trim();
+
+    if (line.startsWith("```")) {
+      if (inCode) {
+        html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+        codeLines = [];
+        inCode = false;
+      } else {
+        closeList();
+        inCode = true;
+      }
+      continue;
+    }
+
+    if (inCode) {
+      codeLines.push(rawLine);
+      continue;
+    }
+
+    if (!line) {
+      closeList();
+      continue;
+    }
+
+    if (/^\|.+\|$/.test(line) && /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test((lines[index + 1] || "").trim())) {
+      closeList();
+      const headers = line.split("|").map((cell) => cell.trim()).filter(Boolean);
+      const rows = [];
+      index += 2;
+      while (index < lines.length && /^\|.+\|$/.test(lines[index].trim())) {
+        rows.push(lines[index].split("|").map((cell) => cell.trim()).filter(Boolean));
+        index += 1;
+      }
+      index -= 1;
+      html.push("<table><thead><tr>" + headers.map((cell) => `<th>${renderInline(cell)}</th>`).join("") + "</tr></thead><tbody>");
+      rows.forEach((row) => {
+        html.push("<tr>" + row.map((cell) => `<td>${renderInline(cell)}</td>`).join("") + "</tr>");
+      });
+      html.push("</tbody></table>");
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      closeList();
+      const level = heading[1].length;
+      html.push(`<h${level}>${renderInline(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    if (line.startsWith(">")) {
+      closeList();
+      html.push(`<blockquote>${renderInline(line.replace(/^>\s?/, ""))}</blockquote>`);
+      continue;
+    }
+
+    const unordered = line.match(/^[-*]\s+(.+)$/);
+    const ordered = line.match(/^\d+\.\s+(.+)$/);
+    if (unordered || ordered) {
+      const nextType = ordered ? "ol" : "ul";
+      if (!inList || listType !== nextType) {
+        closeList();
+        listType = nextType;
+        inList = true;
+        html.push(`<${listType}>`);
+      }
+      html.push(`<li>${renderInline((unordered || ordered)[1])}</li>`);
+      continue;
+    }
+
+    closeList();
+    html.push(`<p>${renderInline(line)}</p>`);
+  }
+
+  closeList();
+  if (inCode) html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+  return html.join("\n");
+}
+
+async function openDocumentModal(link) {
+  const dict = currentDictionary();
+  const title = link.textContent.trim() || link.dataset.docTitle || "Document";
+  const languageKey = `docHref${languageSelect.value.charAt(0).toUpperCase()}${languageSelect.value.slice(1)}`;
+  const documentHref = link.dataset[languageKey] || link.getAttribute("href");
+  const documentUrl = new URL(documentHref, window.location.href).href;
+  docTitle.textContent = title;
+  docContent.innerHTML = `<div class="doc-loading">${dict["modal.loading"]}</div>`;
+  docModal.hidden = false;
+  document.body.style.overflow = "hidden";
+  docWindow.focus();
+
+  try {
+    const response = await fetch(documentHref);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const markdown = await response.text();
+    docContent.innerHTML = renderMarkdown(markdown);
+  } catch (error) {
+    docContent.innerHTML = `<div class="doc-loading">${escapeHtml(dict["modal.error"])}<br><br><a href="${escapeHtml(documentUrl)}" target="_blank" rel="noreferrer">${escapeHtml(title)}</a></div>`;
+  }
+}
+
+function closeDocumentModal() {
+  docModal.hidden = true;
+  document.body.style.overflow = "";
+}
+
+document.querySelectorAll("[data-doc-modal]").forEach((link) => {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    openDocumentModal(link);
+  });
+});
+
+document.querySelectorAll("[data-doc-close]").forEach((node) => {
+  node.addEventListener("click", closeDocumentModal);
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !docModal.hidden) closeDocumentModal();
+});
+
+window.addEventListener("scroll", () => {
+  backTop.classList.toggle("is-visible", window.scrollY > 580);
+}, { passive: true });
+
+backTop.addEventListener("click", () => {
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
+const canUseCursorGhost = window.matchMedia("(hover: hover) and (pointer: fine)").matches &&
+  !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+if (canUseCursorGhost) {
+  let targetX = -100;
+  let targetY = -100;
+  let ghostX = -100;
+  let ghostY = -100;
+  let lastSpark = 0;
+
+  window.addEventListener("pointermove", (event) => {
+    targetX = event.clientX + 14;
+    targetY = event.clientY + 14;
+    cursorGhost.classList.add("is-active");
+
+    const now = performance.now();
+    if (now - lastSpark > 90) {
+      lastSpark = now;
+      const spark = document.createElement("span");
+      spark.className = "ghost-spark";
+      spark.style.left = `${event.clientX + (Math.random() * 18 - 9)}px`;
+      spark.style.top = `${event.clientY + (Math.random() * 18 - 9)}px`;
+      spark.style.setProperty("--spark-x", `${Math.random() * 34 - 17}px`);
+      spark.style.setProperty("--spark-y", `${Math.random() * 34 - 17}px`);
+      document.body.appendChild(spark);
+      spark.addEventListener("animationend", () => spark.remove(), { once: true });
+    }
+  }, { passive: true });
+
+  window.addEventListener("pointerleave", () => {
+    cursorGhost.classList.remove("is-active");
+  });
+
+  function animateCursorGhost() {
+    ghostX += (targetX - ghostX) * .16;
+    ghostY += (targetY - ghostY) * .16;
+    cursorGhost.style.transform = `translate3d(${ghostX}px, ${ghostY}px, 0)`;
+    requestAnimationFrame(animateCursorGhost);
+  }
+  animateCursorGhost();
+}
+
+const revealObserver = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add("is-visible");
+      revealObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: .14 });
+
+document.querySelectorAll(".reveal").forEach((node) => revealObserver.observe(node));
+</script>
+</body>
+</html>

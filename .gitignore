@@ -25,6 +25,7 @@ local.properties
 
 # Go
 shadow_daemon/shadowdaemon
+shadow_daemon/daemon
 shadow_daemon/shadowfs.db
 shadow_daemon/shadowfs.db-*
 shadow_daemon/shadow_root/
@@ -36,5 +37,4 @@ shadow_daemon/certs_for_android*/
 *.tmp
 *.part
 
-# Local website build/content
-sito/
+.aider*

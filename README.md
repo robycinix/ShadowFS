@@ -10,6 +10,8 @@
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/License-MIT-green.svg"></a>
   <img alt="Android and Raspberry Pi" src="https://img.shields.io/badge/platform-Android%20%2B%20Raspberry%20Pi%20%2F%20home%20server-38bdf8">
   <img alt="Project status" src="https://img.shields.io/badge/status-field%20testing-f59e0b">
+  <img alt="Go daemon" src="https://img.shields.io/badge/daemon-Go-00ADD8?logo=go&logoColor=white">
+  <img alt="Kotlin client" src="https://img.shields.io/badge/client-Kotlin-7F52FF?logo=kotlin&logoColor=white">
 </p>
 
 <p align="center">
@@ -53,7 +55,6 @@ Default ports:
 | --- | --- |
 | `4243/tcp` | Android client protocol over TLS + mTLS |
 | `4244/tcp` | temporary HTTP pairing endpoint for QR setup |
-| `4242/udp` | experimental QUIC path, currently parked |
 
 ## Ghosting Flow
 
@@ -87,7 +88,7 @@ Recommended use today:
 .
 ├── shadow_client/          Android app, Kotlin + Gradle
 ├── shadow_daemon/          Raspberry Pi daemon, Go + SQLite
-├── proto/                  future protocol schema
+├── sito/                   project website + localized docs (EN·IT·DE·ES·FR)
 ├── docs/assets/            README images and diagrams
 ├── USER_MANUAL.md          end-user setup and usage guide
 ├── DEPLOY_GUIDE.md         deployment guide for Android + Raspberry Pi
@@ -101,7 +102,6 @@ Recommended use today:
 
 The daemon is a single static Go binary: it runs the same on a Raspberry Pi,
 an old laptop, a NAS or any x86/ARM Linux box plugged into your home network.
-
 
 ```bash
 git clone https://github.com/robycinix/ShadowFS.git
@@ -194,6 +194,8 @@ requests to `main`.
 - [Security Policy](SECURITY.md)
 - [Contributing Guide](CONTRIBUTING.md)
 - [Changelog](CHANGELOG.md)
+- Localized guides — English, Italiano, Deutsch, Español, Français — in
+  [`sito/docs/`](sito/docs)
 
 ## Roadmap
 
@@ -206,7 +208,7 @@ requests to `main`.
 - [x] Anti-loop handling for cloud backup apps
 - [ ] Signed release builds
 - [ ] Automated Android instrumentation tests
-- [ ] Protocol versioning with Protobuf
+- [ ] Formal protocol schema (Protobuf or similar)
 - [ ] Optional QUIC transport after the TCP path is fully validated
 - [ ] Incremental backup or block-level dedupe
 
