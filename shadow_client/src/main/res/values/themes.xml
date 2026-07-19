@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ShadowFS — Tema "Spectral Dark" basato su Material 3 -->
+<resources>
+
+    <style name="Theme.ShadowFS" parent="Theme.Material3.Dark.NoActionBar">
+        <!-- Colori brand -->
+        <item name="colorPrimary">@color/spectral</item>
+        <item name="colorOnPrimary">@color/bg_void</item>
+        <item name="colorPrimaryContainer">@color/spectral_dim</item>
+        <item name="colorOnPrimaryContainer">@color/spectral_bright</item>
+        <item name="colorSecondary">@color/cyan</item>
+        <item name="colorOnSecondary">@color/bg_void</item>
+        <item name="colorSecondaryContainer">@color/cyan_dim</item>
+        <item name="colorOnSecondaryContainer">@color/cyan</item>
+        <item name="colorError">@color/danger</item>
+        <item name="colorErrorContainer">@color/danger_dim</item>
+
+        <!-- Superfici -->
+        <item name="android:colorBackground">@color/bg_deep</item>
+        <item name="colorSurface">@color/bg_surface</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorSurfaceVariant">@color/bg_surface_high</item>
+        <item name="colorOnSurfaceVariant">@color/text_secondary</item>
+        <item name="colorOutline">@color/stroke_default</item>
+        <item name="colorOutlineVariant">@color/stroke_subtle</item>
+
+        <!-- Barre di sistema -->
+        <item name="android:statusBarColor">@color/bg_deep</item>
+        <item name="android:navigationBarColor">@color/bg_deep</item>
+        <item name="android:windowLightStatusBar">false</item>
+
+        <!-- Componenti -->
+        <item name="materialAlertDialogTheme">@style/ShadowFS.Dialog</item>
+        <item name="alertDialogTheme">@style/ShadowFS.Dialog</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="colorControlHighlight">@color/ripple</item>
+    </style>
+
+    <!-- Dialog Material arrotondati e scuri -->
+    <style name="ShadowFS.Dialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="colorSurface">@color/bg_surface_high</item>
+        <item name="colorPrimary">@color/spectral_bright</item>
+        <item name="shapeAppearanceOverlay">@style/ShadowFS.Dialog.Shape</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+    </style>
+
+    <style name="ShadowFS.Dialog.Shape" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">24dp</item>
+    </style>
+
+    <!-- ── Stili pulsanti ──────────────────────────────────────────── -->
+
+    <!-- Azione primaria piena (Avvia daemon) -->
+    <style name="ShadowFS.Button" parent="Widget.Material3.Button">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.01</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:minHeight">54dp</item>
+        <item name="cornerRadius">16dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="iconPadding">10dp</item>
+        <item name="backgroundTint">@color/spectral</item>
+        <item name="android:textColor">@color/bg_void</item>
+        <item name="iconTint">@color/bg_void</item>
+        <item name="rippleColor">@color/ripple</item>
+    </style>
+
+    <!-- Tonale: azioni secondarie -->
+    <style name="ShadowFS.Button.Tonal">
+        <item name="backgroundTint">@color/spectral_dim</item>
+        <item name="android:textColor">@color/spectral_bright</item>
+        <item name="iconTint">@color/spectral_bright</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:minHeight">50dp</item>
+    </style>
+
+    <!-- Tonale ciano -->
+    <style name="ShadowFS.Button.Cyan">
+        <item name="backgroundTint">@color/cyan_dim</item>
+        <item name="android:textColor">@color/cyan</item>
+        <item name="iconTint">@color/cyan</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:minHeight">50dp</item>
+    </style>
+
+    <!-- Tonale pericolo -->
+    <style name="ShadowFS.Button.Danger">
+        <item name="backgroundTint">@color/danger_dim</item>
+        <item name="android:textColor">@color/danger</item>
+        <item name="iconTint">@color/danger</item>
+        <item name="android:textStyle">normal</item>
+        <item name="android:minHeight">50dp</item>
+    </style>
+
+    <!-- Outlined: azioni neutre -->
+    <style name="ShadowFS.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:textSize">14sp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:minHeight">50dp</item>
+        <item name="cornerRadius">16dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="iconPadding">8dp</item>
+        <item name="strokeColor">@color/stroke_default</item>
+        <item name="android:textColor">@color/text_secondary</item>
+        <item name="iconTint">@color/text_secondary</item>
+        <item name="rippleColor">@color/ripple</item>
+    </style>
+
+    <!-- Campi di testo -->
+    <style name="ShadowFS.TextInput" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeColor">@color/stroke_focus</item>
+        <item name="boxStrokeWidth">1dp</item>
+        <item name="boxBackgroundColor">@color/bg_surface_high</item>
+        <item name="boxCornerRadiusTopStart">14dp</item>
+        <item name="boxCornerRadiusTopEnd">14dp</item>
+        <item name="boxCornerRadiusBottomStart">14dp</item>
+        <item name="boxCornerRadiusBottomEnd">14dp</item>
+        <item name="hintTextColor">@color/spectral_bright</item>
+        <item name="android:textColorHint">@color/text_tertiary</item>
+    </style>
+
+    <!-- Titoli di sezione -->
+    <style name="ShadowFS.SectionTitle" parent="">
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:letterSpacing">0.02</item>
+    </style>
+
+    <style name="ShadowFS.SectionCaption" parent="">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/text_tertiary</item>
+    </style>
+
+    <!-- Thumbnail arrotondato nella lista ghost -->
+    <style name="ShadowFS.RoundedThumb" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">14dp</item>
+    </style>
+
+    <!-- Toolbar -->
+    <style name="ShadowFS.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="android:background">@color/bg_deep</item>
+        <item name="titleTextColor">@color/text_primary</item>
+        <item name="navigationIconTint">@color/text_secondary</item>
+        <item name="titleTextAppearance">@style/ShadowFS.Toolbar.Title</item>
+    </style>
+
+    <style name="ShadowFS.Toolbar.Title" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textSize">19sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+</resources>

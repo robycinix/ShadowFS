@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ═══════════════════════════════════════════════════════════════════
+     ShadowFS — "Spectral Dark" Design System
+     Palette: blu notte profondo + accenti spettrali ciano/viola
+     ═══════════════════════════════════════════════════════════════════ -->
+<resources>
+
+    <!-- ── Sfondi ──────────────────────────────────────────────────── -->
+    <color name="bg_void">#070710</color>          <!-- sfondo app più profondo -->
+    <color name="bg_deep">#0B0B18</color>          <!-- sfondo schermata -->
+    <color name="bg_surface">#12121F</color>       <!-- card -->
+    <color name="bg_surface_high">#181828</color>  <!-- card elevata / input -->
+    <color name="bg_surface_higher">#1F1F33</color><!-- hover / pressed -->
+
+    <!-- ── Bordi e divisori ────────────────────────────────────────── -->
+    <color name="stroke_subtle">#1E1E30</color>
+    <color name="stroke_default">#262640</color>
+    <color name="stroke_focus">#4D5DFE</color>
+
+    <!-- ── Testi ───────────────────────────────────────────────────── -->
+    <color name="text_primary">#EDEDFB</color>
+    <color name="text_secondary">#9C9CC0</color>
+    <color name="text_tertiary">#62627F</color>
+    <color name="text_disabled">#3D3D55</color>
+
+    <!-- ── Accento spettrale (primario) ────────────────────────────── -->
+    <color name="spectral">#7B6CFF</color>         <!-- viola spettrale -->
+    <color name="spectral_bright">#9D8FFF</color>
+    <color name="spectral_dim">#2A2456</color>     <!-- container -->
+    <color name="spectral_glow">#337B6CFF</color>  <!-- 20% alpha glow -->
+
+    <!-- ── Accento secondario ciano ────────────────────────────────── -->
+    <color name="cyan">#4DD8E6</color>
+    <color name="cyan_dim">#10333B</color>
+
+    <!-- ── Semantici ───────────────────────────────────────────────── -->
+    <color name="success">#5DE6A8</color>
+    <color name="success_dim">#10311F</color>
+    <color name="warning">#FFC065</color>
+    <color name="warning_dim">#33250F</color>
+    <color name="danger">#FF7A8A</color>
+    <color name="danger_dim">#361318</color>
+
+    <!-- ── Gauge storage ───────────────────────────────────────────── -->
+    <color name="gauge_track">#1A1A2C</color>
+
+    <!-- ── Varie ───────────────────────────────────────────────────── -->
+    <color name="scrim">#CC070710</color>
+    <color name="ripple">#33FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="white">#FFFFFF</color>
+</resources>

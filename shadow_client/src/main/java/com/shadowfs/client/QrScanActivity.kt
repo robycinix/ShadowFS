@@ -33,8 +33,8 @@ class QrScanActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_qr_scan)
 
-        supportActionBar?.title = getString(R.string.qr_scan_title)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.qr_toolbar)
+            .setNavigationOnClickListener { finish() }
 
         previewView  = findViewById(R.id.preview_view)
         tvScanStatus = findViewById(R.id.tv_scan_status)
@@ -114,12 +114,20 @@ class QrScanActivity : AppCompatActivity() {
                     if (!isLocalOrTailscaleHost(host)) {
                         throw SecurityException(getString(R.string.qr_invalid_url, host))
                     }
+
+                    // Chiave AES-256 nel FRAGMENT (#k=...): non viene mai inviata
+                    // nella richiesta HTTP — esiste solo nel QR. Serve a decifrare
+                    // il payload (che contiene la chiave privata mTLS).
+                    val pairingKeyHex = url.ref
+                        ?.takeIf { it.startsWith("k=") }
+                        ?.removePrefix("k=")
+
                     runOnUiThread { tvScanStatus.setText(R.string.qr_downloading_config) }
                     val conn = url.openConnection() as HttpURLConnection
                     conn.connectTimeout = 8_000
                     conn.readTimeout = 8_000
                     conn.requestMethod = "GET"
-                    try {
+                    val body = try {
                         conn.connect()
                         if (conn.responseCode != 200) {
                             throw Exception(getString(R.string.qr_server_error, conn.responseCode))
@@ -128,6 +136,7 @@ class QrScanActivity : AppCompatActivity() {
                     } finally {
                         conn.disconnect()
                     }
+                    decryptPairingResponse(body, pairingKeyHex)
                 } else {
                     raw // JSON diretto nel QR (legacy)
                 }
@@ -141,6 +150,33 @@ class QrScanActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Il daemon (protocollo pairing v2) risponde con {"v":2,"nonce":..,"data":..}
+     * cifrato AES-256-GCM con la chiave presente solo nel QR. Le risposte legacy
+     * (JSON con "ip" in chiaro) vengono accettate per compatibilità con daemon vecchi.
+     */
+    private fun decryptPairingResponse(body: String, keyHex: String?): String {
+        val json = JSONObject(body)
+        if (!json.has("data") || !json.has("nonce")) {
+            return body // payload legacy in chiaro
+        }
+        if (keyHex == null || keyHex.length != 64) {
+            throw SecurityException("Payload cifrato ma chiave assente nel QR — aggiorna il QR (riavvia il daemon)")
+        }
+        val key = ByteArray(32) { i ->
+            keyHex.substring(i * 2, i * 2 + 2).toInt(16).toByte()
+        }
+        val nonce = Base64.decode(json.getString("nonce"), Base64.DEFAULT)
+        val data = Base64.decode(json.getString("data"), Base64.DEFAULT)
+        val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(
+            javax.crypto.Cipher.DECRYPT_MODE,
+            javax.crypto.spec.SecretKeySpec(key, "AES"),
+            javax.crypto.spec.GCMParameterSpec(128, nonce)
+        )
+        return String(cipher.doFinal(data), Charsets.UTF_8)
     }
 
     private fun applyPairingPayload(jsonStr: String) {
@@ -183,22 +219,41 @@ class QrScanActivity : AppCompatActivity() {
     }
 
     /**
-     * Verifica che l'host sia un IP locale o Tailscale, non un server pubblico.
+     * Verifica che l'host sia un IP LETTERALE locale o Tailscale, non un server pubblico.
      * IP ammessi: 192.168.x.x, 10.x.x.x, 172.16-31.x.x, 127.x.x.x
      * Tailscale: 100.64.0.0/10 → da 100.64.x.x a 100.127.x.x
      *   (il range 100.0-63.x è CGNAT pubblico e NON è accettato)
+     *
+     * IMPORTANTE: si accettano SOLO IP numerici in forma canonica. Un controllo
+     * sui prefissi di stringa farebbe passare hostname malevoli come
+     * "192.168.evil.com", che punterebbero la fetch del pairing (e quindi
+     * certificati + IP del server) verso un server pubblico dell'attaccante.
+     * Vietati anche zeri iniziali ("010.1.1.1"): alcuni resolver li
+     * interpretano come ottale → IP diverso da quello validato.
      */
     private fun isLocalOrTailscaleHost(host: String): Boolean {
-        if (host.startsWith("192.168.") ||
-            host.startsWith("10.") ||
-            host.startsWith("127.") ||
-            host == "localhost" ||
-            Regex("""^172\.(1[6-9]|2\d|3[01])\.""").containsMatchIn(host)) {
-            return true
+        if (host == "localhost") return true
+
+        val octets = host.split(".")
+        if (octets.size != 4) return false
+        val o = IntArray(4)
+        for (i in 0..3) {
+            val s = octets[i]
+            if (s.isEmpty() || s.length > 3 || s.any { !it.isDigit() }) return false
+            if (s.length > 1 && s[0] == '0') return false // niente notazione ottale
+            val v = s.toInt()
+            if (v > 255) return false
+            o[i] = v
         }
-        // Tailscale usa 100.64.0.0/10: secondo ottetto 64–127
-        val tailscaleMatch = Regex("""^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.""").containsMatchIn(host)
-        return tailscaleMatch
+
+        return when {
+            o[0] == 127 -> true                          // loopback
+            o[0] == 10 -> true                           // 10.0.0.0/8
+            o[0] == 192 && o[1] == 168 -> true           // 192.168.0.0/16
+            o[0] == 172 && o[1] in 16..31 -> true        // 172.16.0.0/12
+            o[0] == 100 && o[1] in 64..127 -> true       // Tailscale 100.64.0.0/10
+            else -> false
+        }
     }
 
     override fun onSupportNavigateUp(): Boolean { finish(); return true }

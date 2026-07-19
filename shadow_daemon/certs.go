@@ -49,7 +49,7 @@ func GenerateMTLSCertificates(outDir string, serverIPs []net.IP) error {
 	if err != nil {
 		return err
 	}
-	if err := savePEM(filepath.Join(outDir, "ca.key"), "PRIVATE KEY", caKeyBytes); err != nil {
+	if err := saveKeyPEM(filepath.Join(outDir, "ca.key"), "PRIVATE KEY", caKeyBytes); err != nil {
 		return err
 	}
 
@@ -84,7 +84,7 @@ func GenerateMTLSCertificates(outDir string, serverIPs []net.IP) error {
 	if err != nil {
 		return err
 	}
-	if err := savePEM(filepath.Join(outDir, "server.key"), "PRIVATE KEY", serverKeyBytes); err != nil {
+	if err := saveKeyPEM(filepath.Join(outDir, "server.key"), "PRIVATE KEY", serverKeyBytes); err != nil {
 		return err
 	}
 
@@ -113,7 +113,7 @@ func GenerateMTLSCertificates(outDir string, serverIPs []net.IP) error {
 	if err != nil {
 		return err
 	}
-	if err := savePEM(filepath.Join(outDir, "client.key"), "PRIVATE KEY", clientKeyBytes); err != nil {
+	if err := saveKeyPEM(filepath.Join(outDir, "client.key"), "PRIVATE KEY", clientKeyBytes); err != nil {
 		return err
 	}
 
@@ -138,14 +138,26 @@ func GenerateDeviceCertificate(certsDir, deviceID string) error {
 		return fmt.Errorf("impossibile leggere ca.crt: %v", err)
 	}
 
+	// Parsing difensivo: pem.Decode può restituire nil e il cast a RSA può
+	// fallire su file corrotti/di tipo diverso — meglio un errore chiaro
+	// che un panic del daemon.
 	caKeyBlock, _ := pem.Decode(caKeyPEM)
+	if caKeyBlock == nil {
+		return fmt.Errorf("ca.key non è un PEM valido")
+	}
 	caKeyIface, err := x509.ParsePKCS8PrivateKey(caKeyBlock.Bytes)
 	if err != nil {
 		return fmt.Errorf("impossibile parsare ca.key: %v", err)
 	}
-	caPrivKey := caKeyIface.(*rsa.PrivateKey)
+	caPrivKey, ok := caKeyIface.(*rsa.PrivateKey)
+	if !ok {
+		return fmt.Errorf("ca.key non è una chiave RSA (tipo: %T)", caKeyIface)
+	}
 
 	caCertBlock, _ := pem.Decode(caCertPEM)
+	if caCertBlock == nil {
+		return fmt.Errorf("ca.crt non è un PEM valido")
+	}
 	caCert, err := x509.ParseCertificate(caCertBlock.Bytes)
 	if err != nil {
 		return fmt.Errorf("impossibile parsare ca.crt: %v", err)
@@ -178,21 +190,40 @@ func GenerateDeviceCertificate(certsDir, deviceID string) error {
 	if err != nil {
 		return err
 	}
-	if err := savePEM(filepath.Join(outDir, "client.key"), "PRIVATE KEY", clientKeyBytes); err != nil {
+	if err := saveKeyPEM(filepath.Join(outDir, "client.key"), "PRIVATE KEY", clientKeyBytes); err != nil {
 		return err
 	}
-	// Copia la CA (stessa per tutti i dispositivi)
-	caData, _ := os.ReadFile(filepath.Join(certsDir, "ca.crt"))
-	os.WriteFile(filepath.Join(outDir, "ca.crt"), caData, 0644)
+	// Copia la CA (stessa per tutti i dispositivi) — caCertPEM è già stato
+	// letto e validato sopra: riusarlo evita una seconda lettura non controllata.
+	if err := os.WriteFile(filepath.Join(outDir, "ca.crt"), caCertPEM, 0644); err != nil {
+		return err
+	}
 
 	return nil
 }
 
+// savePEM scrive certificati pubblici con permessi 0644.
 func savePEM(filename, pemType string, bytes []byte) error {
-	f, err := os.Create(filename)
+	return savePEMWithMode(filename, pemType, bytes, 0644)
+}
+
+// saveKeyPEM scrive chiavi private con permessi 0600: una chiave
+// world-readable permette a qualsiasi processo locale di impersonare
+// server o client mTLS.
+func saveKeyPEM(filename, pemType string, bytes []byte) error {
+	return savePEMWithMode(filename, pemType, bytes, 0600)
+}
+
+func savePEMWithMode(filename, pemType string, bytes []byte, mode os.FileMode) error {
+	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	// Chmod esplicito: O_CREATE applica mode solo ai file NUOVI; su un file
+	// esistente (rigenerazione certificati) i vecchi permessi resterebbero.
+	if err := f.Chmod(mode); err != nil {
+		return err
+	}
 	return pem.Encode(f, &pem.Block{Type: pemType, Bytes: bytes})
 }

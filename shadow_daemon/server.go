@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -19,13 +18,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/quic-go/quic-go"
 )
 
 const (
 	ChunkSize      = 4 * 1024 * 1024 // 4 MB
 	MaxConnections = 50              // max connessioni TCP simultanee
 	MinFreeBytesGB = 1               // ghosting rifiutato se Raspberry ha meno di 1 GB libero
+	IdleTimeout    = 5 * time.Minute // chiusura connessioni inattive (anti slot-exhaustion)
 )
 
 var activeConnections int32 // contatore atomico connessioni attive
@@ -55,14 +54,17 @@ func StartTCPServer(addr, certFile, keyFile, caFile string, db *sql.DB, storageP
 			log.Printf("TCP accept error: %v", err)
 			continue
 		}
-		// Rate limiting: max connessioni simultanee
-		if atomic.LoadInt32(&activeConnections) >= MaxConnections {
+		// Rate limiting: max connessioni simultanee.
+		// Incremento PRIMA del check con rollback se oltre soglia: il vecchio
+		// check-then-add non era atomico e permetteva di sforare il limite
+		// con accept concorrenti.
+		if n := atomic.AddInt32(&activeConnections, 1); n > MaxConnections {
+			atomic.AddInt32(&activeConnections, -1)
 			log.Printf("⚠️ Troppe connessioni (%d/%d) — rifiutata connessione da %s",
-				atomic.LoadInt32(&activeConnections), MaxConnections, conn.RemoteAddr())
+				n-1, MaxConnections, conn.RemoteAddr())
 			conn.Close()
 			continue
 		}
-		atomic.AddInt32(&activeConnections, 1)
 		go func(c net.Conn) {
 			defer atomic.AddInt32(&activeConnections, -1)
 			handleTCPConnection(c, db, storagePath)
@@ -83,8 +85,15 @@ func handleTCPConnection(conn net.Conn, db *sql.DB, storagePath string) {
 		return
 	}
 
+	// Timeout di inattività: senza deadline una connessione stallata (client
+	// sparito senza chiudere il socket) resterebbe aperta per sempre — 50
+	// connessioni morte esauriscono MaxConnections fino al riavvio (DoS).
+	// Il deadline è rinnovato a ogni Read/Write, quindi i trasferimenti
+	// lunghi ma attivi (upload da molti GB) non scadono mai.
+	rw := &idleConn{Conn: conn, timeout: IdleTimeout}
+
 	cmdBuf := make([]byte, 1)
-	if _, err := io.ReadFull(conn, cmdBuf); err != nil {
+	if _, err := io.ReadFull(rw, cmdBuf); err != nil {
 		if err != io.EOF && err != io.ErrUnexpectedEOF {
 			log.Printf("[TCP] Errore lettura cmd: %v", err)
 		}
@@ -94,16 +103,34 @@ func handleTCPConnection(conn net.Conn, db *sql.DB, storagePath string) {
 
 	switch cmdBuf[0] {
 	case 1:
-		handleUpload(conn, db, deviceStorage, deviceID)
+		handleUpload(rw, db, deviceStorage, deviceID)
 	case 2:
-		handleDownload(conn, db, deviceStorage, deviceID)
+		handleDownload(rw, db, deviceStorage, deviceID)
 	case 3:
-		handleDelete(conn, db, deviceStorage, deviceID)
+		handleDelete(rw, db, deviceStorage, deviceID)
 	case 4:
-		handleSyncIndex(conn, db, deviceID)
+		handleSyncIndex(rw, db, deviceID)
 	default:
 		log.Printf("[TCP] ⚠️ Comando sconosciuto: %d", cmdBuf[0])
 	}
+}
+
+// idleConn rinnova il deadline della connessione a ogni Read/Write riuscita:
+// le connessioni attive non scadono mai, quelle inattive vengono chiuse dopo
+// [timeout], liberando lo slot di MaxConnections.
+type idleConn struct {
+	net.Conn
+	timeout time.Duration
+}
+
+func (c *idleConn) Read(p []byte) (int, error) {
+	c.Conn.SetDeadline(time.Now().Add(c.timeout))
+	return c.Conn.Read(p)
+}
+
+func (c *idleConn) Write(p []byte) (int, error) {
+	c.Conn.SetDeadline(time.Now().Add(c.timeout))
+	return c.Conn.Write(p)
 }
 
 // getDeviceID estrae il CN dal certificato TLS client per identificare il dispositivo.
@@ -147,65 +174,9 @@ func sanitizeCN(cn string) string {
 	return b.String()
 }
 
-// ============================================================
-// SERVER QUIC SPERIMENTALE (per uso futuro / test desktop)
-// ============================================================
-
-// StartServer avvia il server QUIC+mTLS sperimentale.
-// Non è avviato dal main e non implementa ancora tutti i comandi TCP.
-func StartServer(addr, certFile, keyFile, caFile string, db *sql.DB, storagePath string) error {
-	tlsConf, err := buildTLSConfig(certFile, keyFile, caFile, true)
-	if err != nil {
-		return fmt.Errorf("QUIC TLS Config Error: %v", err)
-	}
-
-	listener, err := quic.ListenAddr(addr, tlsConf, nil)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("🚀 QUIC+mTLS Server in ascolto su %s (UDP)", addr)
-
-	for {
-		conn, err := listener.Accept(context.Background())
-		if err != nil {
-			log.Printf("Errore accettazione connessione QUIC: %v", err)
-			continue
-		}
-		go handleQUICConnection(conn, db, storagePath)
-	}
-}
-
-func handleQUICConnection(conn quic.Connection, db *sql.DB, storagePath string) {
-	log.Printf("🔒 [QUIC] Nuova connessione mTLS da: %s", conn.RemoteAddr())
-	for {
-		stream, err := conn.AcceptStream(context.Background())
-		if err != nil {
-			log.Printf("[QUIC] Stream chiuso per %s: %v", conn.RemoteAddr(), err)
-			return
-		}
-		go handleStream(stream, db, storagePath)
-	}
-}
-
-func handleStream(stream quic.Stream, db *sql.DB, storagePath string) {
-	defer stream.Close()
-
-	cmdBuf := make([]byte, 1)
-	if _, err := io.ReadFull(stream, cmdBuf); err != nil {
-		log.Printf("[QUIC] Read err: %v", err)
-		return
-	}
-
-	switch cmdBuf[0] {
-	case 1:
-		handleUpload(stream, db, storagePath, "quic-client")
-	case 2:
-		handleDownload(stream, db, storagePath, "quic-client")
-	default:
-		log.Printf("[QUIC] ⚠️ Comando sconosciuto: %d", cmdBuf[0])
-	}
-}
+// NOTA: il server QUIC sperimentale è stato RIMOSSO (mai avviato dal main).
+// Motivo: quic-go v0.37 vincolava la build a Go ≤1.21 (qtls-go1-20 non
+// compila con toolchain più recenti). Il codice resta nella history git.
 
 // ============================================================
 // HANDLERS CONDIVISI (funzionano sia con TCP net.Conn che QUIC Stream)
@@ -282,10 +253,14 @@ func handleUpload(rw io.ReadWriter, db *sql.DB, storagePath, deviceID string) {
 	}
 	partPath := fullPath + ".part"
 
-	// 4b. Controlla spazio libero sul disco (min 1 GB)
+	// 4b. Controlla spazio libero sul disco: deve bastare per il file in arrivo
+	// PIÙ il margine di sicurezza. Il vecchio controllo a soglia fissa (1 GB)
+	// lasciava partire un upload da 20 GB con 1,5 GB liberi, riempiendo il disco.
 	if freeBytes, spaceErr := diskFreeBytes(storagePath); spaceErr == nil {
-		if freeBytes < uint64(MinFreeBytesGB)*1024*1024*1024 {
-			log.Printf("[Upload] ❌ Spazio insufficiente sul Raspberry (%d MB liberi)", freeBytes/1024/1024)
+		required := uint64(expectedSize) + uint64(MinFreeBytesGB)*1024*1024*1024
+		if freeBytes < required {
+			log.Printf("[Upload] ❌ Spazio insufficiente sul Raspberry per '%s': %d MB liberi, servono %d MB",
+				relPath, freeBytes/1024/1024, required/1024/1024)
 			return
 		}
 	}
@@ -343,10 +318,33 @@ func handleUpload(rw io.ReadWriter, db *sql.DB, storagePath, deviceID string) {
 		return
 	}
 
-	// 8. Trasferisce esattamente i byte mancanti. Se la connessione si interrompe,
+	// 8. Hash incrementale: lo SHA-256 viene calcolato DURANTE la ricezione
+	// (io.MultiWriter), non rileggendo il .part a fine trasferimento. Con la
+	// vecchia rilettura, su file da molti GB l'hashing post-ricezione superava
+	// il read-timeout del client (120s), che considerava fallito un upload
+	// riuscito → loop infinito di re-upload. L'unica rilettura residua è la
+	// parte già su disco in caso di resume (limitata a resumeOffset byte).
+	hasher := sha256.New()
+	if resumeOffset > 0 {
+		pf, openErr := os.Open(partPath)
+		if openErr != nil {
+			file.Close()
+			log.Printf("[Upload] Errore apertura parziale per hash '%s': %v", partPath, openErr)
+			return
+		}
+		_, hashErr := io.CopyN(hasher, pf, resumeOffset)
+		pf.Close()
+		if hashErr != nil {
+			file.Close()
+			log.Printf("[Upload] Errore hash del parziale '%s': %v", partPath, hashErr)
+			return
+		}
+	}
+
+	// Trasferisce esattamente i byte mancanti. Se la connessione si interrompe,
 	// mantiene il .part per un futuro resume.
 	bytesToReceive := expectedSize - resumeOffset
-	newBytes, copyErr := io.CopyN(file, rw, bytesToReceive)
+	newBytes, copyErr := io.CopyN(io.MultiWriter(file, hasher), rw, bytesToReceive)
 	file.Close()
 
 	if copyErr != nil {
@@ -364,15 +362,9 @@ func handleUpload(rw io.ReadWriter, db *sql.DB, storagePath, deviceID string) {
 		return
 	}
 
-	// 9. Calcola checksum SHA-256 dell'intero .part e confrontalo con quello
-	// inviato dal client. Su mismatch il parziale viene eliminato: non è affidabile
-	// per un resume successivo.
-	checksum, err := calculateFileSHA256(partPath)
-	if err != nil {
-		log.Printf("[Upload] Errore checksum per '%s': %v", partPath, err)
-		rw.Write([]byte{0x00}) // NACK
-		return
-	}
+	// 9. Confronta il checksum calcolato in streaming con quello del client.
+	// Su mismatch il parziale viene eliminato: non è affidabile per un resume.
+	checksum := hex.EncodeToString(hasher.Sum(nil))
 	if checksum != expectedChecksum {
 		log.Printf("[Upload] ❌ Checksum mismatch per %s: ottenuto %s, atteso %s",
 			relPath, checksum, expectedChecksum)
@@ -544,11 +536,22 @@ func handleDownload(rw io.ReadWriter, db *sql.DB, storagePath, deviceID string) 
 		resumeOffset = 0
 	}
 
-	checksum, err := calculateFileSHA256(fullPath)
-	if err != nil {
-		log.Printf("[Download] ❌ Checksum fallito: %s: %v", fullPath, err)
-		rw.Write([]byte{0x00})
-		return
+	// Checksum: riusa quello nel DB (mantenuto da upload e scansione iniziale).
+	// Ricalcolarlo a ogni download — file da GB letti da SD — faceva scadere il
+	// read-timeout del client (120s) PRIMA dello status byte. Il ricalcolo resta
+	// come fallback se il DB non combacia col file su disco (size diversa o
+	// record mancante: file modificato esternamente).
+	var checksum string
+	if dbFile, dbErr := GetFileByRelPath(db, deviceID, relPath); dbErr == nil &&
+		dbFile.Checksum != "" && dbFile.Size == fileSize {
+		checksum = dbFile.Checksum
+	} else {
+		checksum, err = calculateFileSHA256(fullPath)
+		if err != nil {
+			log.Printf("[Download] ❌ Checksum fallito: %s: %v", fullPath, err)
+			rw.Write([]byte{0x00})
+			return
+		}
 	}
 
 	if _, err := file.Seek(resumeOffset, io.SeekStart); err != nil {

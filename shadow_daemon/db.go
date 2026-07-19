@@ -83,29 +83,41 @@ func migrateUniqueConstraint(db *sql.DB) error {
 	}
 
 	log.Printf("🔧 Migrazione DB: aggiungo vincolo UNIQUE(device_id, rel_path) alla tabella files...")
-	migration := `
-	BEGIN;
-	CREATE TABLE files_new (
-		uuid          TEXT PRIMARY KEY,
-		filename      TEXT,
-		device_id     TEXT NOT NULL DEFAULT 'default',
-		rel_path      TEXT,
-		size          INTEGER,
-		status        TEXT,
-		checksum      TEXT,
-		last_modified DATETIME,
-		last_access   DATETIME,
-		UNIQUE(device_id, rel_path)
-	);
-	INSERT OR REPLACE INTO files_new
-		SELECT uuid, filename, device_id, rel_path, size, status, checksum, last_modified, last_access
-		FROM files ORDER BY last_modified ASC;
-	DROP TABLE files;
-	ALTER TABLE files_new RENAME TO files;
-	COMMIT;
-	`
-	if _, err := db.Exec(migration); err != nil {
-		db.Exec("ROLLBACK")
+
+	// Transazione gestita con db.Begin()/tx: il vecchio approccio con
+	// db.Exec("BEGIN; ...") + db.Exec("ROLLBACK") separato poteva eseguire il
+	// ROLLBACK su una connessione DIVERSA del pool, lasciando la transazione
+	// fallita aperta su quella originale.
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	stmts := []string{
+		`CREATE TABLE files_new (
+			uuid          TEXT PRIMARY KEY,
+			filename      TEXT,
+			device_id     TEXT NOT NULL DEFAULT 'default',
+			rel_path      TEXT,
+			size          INTEGER,
+			status        TEXT,
+			checksum      TEXT,
+			last_modified DATETIME,
+			last_access   DATETIME,
+			UNIQUE(device_id, rel_path)
+		)`,
+		`INSERT OR REPLACE INTO files_new
+			SELECT uuid, filename, device_id, rel_path, size, status, checksum, last_modified, last_access
+			FROM files ORDER BY last_modified ASC`,
+		`DROP TABLE files`,
+		`ALTER TABLE files_new RENAME TO files`,
+	}
+	for _, stmt := range stmts {
+		if _, err := tx.Exec(stmt); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
 		return err
 	}
 	log.Printf("✅ Migrazione DB completata.")

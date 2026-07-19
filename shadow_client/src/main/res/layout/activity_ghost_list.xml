@@ -1,44 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#0A0A0F">
+    android:background="@color/bg_deep">
 
-    <!-- Header -->
-    <LinearLayout
+    <!-- Toolbar -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        style="@style/ShadowFS.Toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="16dp"
-        android:background="#1A1A2E"
-        android:gravity="center_vertical">
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/ghost_list_header"
-            android:textColor="#E0E0FF"
-            android:textSize="20sp"
-            android:textStyle="bold"/>
-
-        <TextView
-            android:id="@+id/tv_recovered_total"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textColor="#80D0A0"
-            android:textSize="13sp"
-            android:textStyle="bold"/>
-    </LinearLayout>
+        android:layout_height="?attr/actionBarSize"
+        app:navigationIcon="@drawable/ic_back"
+        app:title="@string/ghost_list_title"/>
 
     <!-- Sommario -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:padding="16dp">
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="12dp">
 
         <TextView
             android:id="@+id/tv_ghost_count"
@@ -46,103 +32,145 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/ghost_count_initial"
-            android:textColor="#8080A0"
+            android:textColor="@color/text_secondary"
             android:textSize="13sp"/>
 
         <TextView
-            android:id="@+id/tv_ghost_status"
+            android:id="@+id/tv_recovered_total"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text=""
-            android:textColor="#8080A0"
-            android:textSize="13sp"/>
+            android:textColor="@color/success"
+            android:textSize="13sp"
+            android:textStyle="bold"/>
     </LinearLayout>
-
-    <View android:layout_width="match_parent" android:layout_height="1dp"
-        android:background="#2A2A3A"/>
 
     <!-- Lista scrollabile -->
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:scrollbars="none">
 
         <LinearLayout
             android:id="@+id/container_ghost_list"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="8dp"/>
+            android:paddingTop="4dp"
+            android:paddingBottom="8dp"/>
     </ScrollView>
 
     <!-- Stato vuoto -->
-    <TextView
-        android:id="@+id/tv_empty"
+    <LinearLayout
+        android:id="@+id/empty_state"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:text="@string/ghost_empty_message"
-        android:textColor="#404050"
-        android:textSize="14sp"
+        android:orientation="vertical"
         android:gravity="center"
-        android:visibility="gone"/>
+        android:visibility="gone">
 
-    <!-- Sezione orfani -->
-    <View android:layout_width="match_parent" android:layout_height="1dp"
-        android:background="#2A2A3A"/>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="16dp"
-        android:gravity="center_vertical">
+        <ImageView
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:src="@drawable/ic_ghost"
+            app:tint="@color/text_disabled"
+            android:contentDescription="@null"/>
 
         <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/orphans_header"
-            android:textColor="#FF8080"
-            android:textSize="13sp"
-            android:textStyle="bold"/>
-
-        <Button
-            android:id="@+id/btn_sync"
+            android:id="@+id/tv_empty"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/button_check"
-            android:backgroundTint="#3A1A1A"
-            android:textColor="#FF8080"
-            android:textSize="12sp"/>
+            android:layout_marginTop="14dp"
+            android:text="@string/ghost_empty_message"
+            android:textColor="@color/text_tertiary"
+            android:textSize="14sp"
+            android:gravity="center"
+            android:lineSpacingExtra="3dp"/>
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/tv_orphans_info"
+    <!-- Sezione orfani -->
+    <com.google.android.material.card.MaterialCardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/orphans_info"
-        android:textColor="#606070"
-        android:textSize="11sp"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="8dp"/>
+        android:layout_margin="12dp"
+        app:cardBackgroundColor="@color/bg_surface"
+        app:cardCornerRadius="18dp"
+        app:cardElevation="0dp"
+        app:strokeColor="@color/stroke_subtle"
+        app:strokeWidth="1dp">
 
-    <LinearLayout
-        android:id="@+id/container_orphans"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="8dp"/>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="14dp">
 
-    <Button
-        android:id="@+id/btn_delete_orphans"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/button_delete_orphans"
-        android:backgroundTint="#3A1A1A"
-        android:textColor="#FF6060"
-        android:layout_margin="8dp"
-        android:visibility="gone"/>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <ImageView
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:background="@drawable/bg_icon_badge"
+                    android:padding="6dp"
+                    android:src="@drawable/ic_sync"
+                    app:tint="@color/warning"
+                    android:contentDescription="@string/orphans_header"/>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="10dp"
+                    android:layout_marginEnd="8dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/orphans_header"
+                        style="@style/ShadowFS.SectionTitle"/>
+
+                    <TextView
+                        android:id="@+id/tv_orphans_info"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/orphans_info"
+                        style="@style/ShadowFS.SectionCaption"/>
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_sync"
+                    style="@style/ShadowFS.Button.Outlined"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="40dp"
+                    android:textSize="13sp"
+                    android:text="@string/button_check"/>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/container_orphans"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingTop="4dp"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_delete_orphans"
+                style="@style/ShadowFS.Button.Danger"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/button_delete_orphans"
+                app:icon="@drawable/ic_delete"
+                android:visibility="gone"/>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
 </LinearLayout>

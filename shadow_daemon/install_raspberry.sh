@@ -118,11 +118,15 @@ echo ""
 echo "   Generazione certificati mTLS con IP: $CERT_IPS"
 ./shadowdaemon --generate-certs --server-ip="$CERT_IPS"
 
-# Copia certificati client in cartella dedicata
+# Copia certificati client in cartella dedicata.
+# Le CHIAVI PRIVATE restano 0600: world-readable, qualsiasi processo locale
+# potrebbe impersonare il client mTLS. I certificati pubblici sono 0644.
 cp certs/ca.crt     "$CERTS_CLIENT_DIR/ca.crt"
 cp certs/client.crt "$CERTS_CLIENT_DIR/client.crt"
 cp certs/client.key "$CERTS_CLIENT_DIR/client.key"
-chmod 644 "$CERTS_CLIENT_DIR/"*
+chmod 644 "$CERTS_CLIENT_DIR/ca.crt" "$CERTS_CLIENT_DIR/client.crt"
+chmod 600 "$CERTS_CLIENT_DIR/client.key"
+chmod 600 certs/*.key 2>/dev/null || true
 
 # 6. Servizio SystemD (TCP su porta 4243)
 echo -e "${GREEN}[5/5] Installazione servizio SystemD...${NC}"

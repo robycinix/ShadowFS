@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Alone spettrale dietro il logo nell'header -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <gradient
+        android:type="radial"
+        android:gradientRadius="46dp"
+        android:startColor="@color/spectral_glow"
+        android:endColor="#00000000"/>
+</shape>

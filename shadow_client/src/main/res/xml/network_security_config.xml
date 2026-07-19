@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Il pairing QR scarica la configurazione da http://<ip-locale>:4244/pair.
+  Da targetSdk 28+ Android blocca il cleartext HTTP di default: senza questa
+  config il pairing fallirebbe SEMPRE con "Cleartext HTTP traffic not permitted".
+
+  NSC non supporta whitelist per range IP (solo hostname), quindi il cleartext
+  viene permesso a livello di base-config; la sicurezza è garantita da
+  QrScanActivity, che accetta SOLO IP letterali privati/Tailscale prima di
+  aprire la connessione. Tutto il traffico dati (upload/download) viaggia
+  comunque su TLS 1.3 + mTLS sulla porta 4243.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

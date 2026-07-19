@@ -9,6 +9,23 @@ STORAGE_DIR="/storage/shadow_root"
 DB_PATH="/opt/shadowfs/shadowfs.db"
 DAYS_THRESHOLD=${1:-30}  # giorni di inattività (default: 30)
 
+# Escaping SQL: raddoppia gli apostrofi. Senza, un nome file come
+# "Foto dell'anno.jpg" (comunissimo in italiano) rompe la query sqlite3:
+# il COUNT fallisce in silenzio e l'esito del controllo orfani è inaffidabile.
+sql_escape() {
+    printf '%s' "$1" | sed "s/'/''/g"
+}
+
+# Un file è considerato orfano SOLO se la query è riuscita E ha restituito 0.
+# Output vuoto = errore sqlite → non toccare il file.
+is_orphan() {
+    local device_esc file_esc count
+    device_esc=$(sql_escape "$1")
+    file_esc=$(sql_escape "$2")
+    count=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM files WHERE device_id='$device_esc' AND rel_path='$file_esc';" 2>/dev/null)
+    [ "$count" = "0" ]
+}
+
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
@@ -40,12 +57,14 @@ for device_dir in "$STORAGE_DIR"/*/; do
     device=$(basename "$device_dir")
     size=$(du -sh "$device_dir" 2>/dev/null | cut -f1)
     file_count=$(find "$device_dir" -type f 2>/dev/null | wc -l)
-    last_access=$(sqlite3 "$DB_PATH" "SELECT MAX(last_access) FROM files WHERE device_id='$device';" 2>/dev/null)
+    last_access=$(sqlite3 "$DB_PATH" "SELECT MAX(last_access) FROM files WHERE device_id='$(sql_escape "$device")';" 2>/dev/null)
     echo -e "  📱 ${GREEN}$device${NC} — $size ($file_count file) — ultimo accesso: ${last_access:-mai}"
 done
 echo ""
 
 # ── 2. Trova file orfani (nel filesystem ma non nel DB) ───────────────────────
+# I .part sono upload in corso/riprendibili, non orfani: vanno esclusi,
+# altrimenti cancellarli azzererebbe il resume (o peggio, durante un upload).
 echo -e "${BLUE}── File nel filesystem senza record nel DB ───────────────${NC}"
 ORPHAN_FS=0
 while IFS= read -r -d '' filepath; do
@@ -53,13 +72,12 @@ while IFS= read -r -d '' filepath; do
     device_id=$(echo "$relpath" | cut -d'/' -f1)
     file_relpath=$(echo "$relpath" | cut -d'/' -f2-)
 
-    count=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM files WHERE device_id='$device_id' AND rel_path='$file_relpath';" 2>/dev/null)
-    if [ "$count" = "0" ]; then
+    if is_orphan "$device_id" "$file_relpath"; then
         size=$(du -sh "$filepath" 2>/dev/null | cut -f1)
         echo -e "  ${YELLOW}⚠️  $relpath${NC} ($size) — non nel DB"
         ORPHAN_FS=$((ORPHAN_FS + 1))
     fi
-done < <(find "$STORAGE_DIR" -type f -print0 2>/dev/null)
+done < <(find "$STORAGE_DIR" -type f ! -name '*.part' -print0 2>/dev/null)
 
 if [ "$ORPHAN_FS" = "0" ]; then
     echo -e "  ${GREEN}Nessun file orfano nel filesystem.${NC}"
@@ -71,7 +89,7 @@ echo -e "${BLUE}── Dispositivi inattivi da più di $DAYS_THRESHOLD giorni �
 INACTIVE_DEVICES=()
 for device_dir in "$STORAGE_DIR"/*/; do
     device=$(basename "$device_dir")
-    last_access=$(sqlite3 "$DB_PATH" "SELECT MAX(last_access) FROM files WHERE device_id='$device';" 2>/dev/null)
+    last_access=$(sqlite3 "$DB_PATH" "SELECT MAX(last_access) FROM files WHERE device_id='$(sql_escape "$device")';" 2>/dev/null)
 
     if [ -z "$last_access" ] || [ "$last_access" = "NULL" ]; then
         echo -e "  ${RED}📱 $device — nessun accesso registrato${NC}"
@@ -112,12 +130,11 @@ case "$choice" in
             relpath="${filepath#$STORAGE_DIR/}"
             device_id=$(echo "$relpath" | cut -d'/' -f1)
             file_relpath=$(echo "$relpath" | cut -d'/' -f2-)
-            count=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM files WHERE device_id='$device_id' AND rel_path='$file_relpath';" 2>/dev/null)
-            if [ "$count" = "0" ]; then
+            if is_orphan "$device_id" "$file_relpath"; then
                 rm "$filepath"
                 echo -e "  ${RED}🗑  Eliminato: $relpath${NC}"
             fi
-        done < <(find "$STORAGE_DIR" -type f -print0 2>/dev/null)
+        done < <(find "$STORAGE_DIR" -type f ! -name '*.part' -print0 2>/dev/null)
         echo -e "${GREEN}✅ Fatto.${NC}"
         ;;
     2)
@@ -136,7 +153,7 @@ case "$choice" in
         read -p "Sei sicuro di voler eliminare TUTTI i file di '$device'? (sì/no): " confirm
         if [ "$confirm" = "sì" ] || [ "$confirm" = "si" ]; then
             rm -rf "${STORAGE_DIR:?}/$device"
-            sqlite3 "$DB_PATH" "DELETE FROM files WHERE device_id='$device';"
+            sqlite3 "$DB_PATH" "DELETE FROM files WHERE device_id='$(sql_escape "$device")';"
             echo -e "${GREEN}✅ Eliminati tutti i file di '$device'.${NC}"
         else
             echo "Operazione annullata."
@@ -150,16 +167,15 @@ case "$choice" in
                 relpath="${filepath#$STORAGE_DIR/}"
                 device_id=$(echo "$relpath" | cut -d'/' -f1)
                 file_relpath=$(echo "$relpath" | cut -d'/' -f2-)
-                count=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM files WHERE device_id='$device_id' AND rel_path='$file_relpath';" 2>/dev/null)
-                if [ "$count" = "0" ]; then
+                if is_orphan "$device_id" "$file_relpath"; then
                     rm "$filepath"
                     echo -e "  ${RED}🗑  $relpath${NC}"
                 fi
-            done < <(find "$STORAGE_DIR" -type f -print0 2>/dev/null)
+            done < <(find "$STORAGE_DIR" -type f ! -name '*.part' -print0 2>/dev/null)
             # Dispositivi inattivi
             for device in "${INACTIVE_DEVICES[@]}"; do
                 rm -rf "${STORAGE_DIR:?}/$device"
-                sqlite3 "$DB_PATH" "DELETE FROM files WHERE device_id='$device';"
+                sqlite3 "$DB_PATH" "DELETE FROM files WHERE device_id='$(sql_escape "$device")';"
                 echo -e "  ${RED}🗑  Dispositivo '$device' eliminato${NC}"
             done
             echo -e "${GREEN}✅ Pulizia completata.${NC}"

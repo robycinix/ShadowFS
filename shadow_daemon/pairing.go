@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -26,8 +28,15 @@ type PairingPayload struct {
 }
 
 // pairingToken è il token one-time generato all'avvio. Valido per pairingWindowSeconds.
+//
+// pairingKey è la chiave AES-256 con cui viene CIFRATO il payload (che contiene
+// la chiave privata mTLS del client). Viaggia SOLO nel fragment dell'URL del QR
+// (#k=...): i client HTTP non trasmettono mai il fragment, quindi uno sniffer
+// sulla LAN vede il token (nella query) ma non la chiave, e il payload cifrato
+// gli è inutile. Il canale fisico (inquadrare il QR) è l'unico modo di ottenerla.
 var (
 	pairingToken         string
+	pairingKey           []byte // 32 byte AES-256, esposta solo nel QR
 	pairingTokenExpiry   time.Time
 	pairingWindowSeconds = 5 * 60 // 5 minuti
 	pairingUsed          int32    // atomic: 1 = già usato
@@ -47,7 +56,31 @@ func generatePairingToken() string {
 // così PrintPairingInfo può leggere il token senza race condition.
 func InitPairingToken() {
 	pairingToken = generatePairingToken()
+	pairingKey = make([]byte, 32)
+	if _, err := rand.Read(pairingKey); err != nil {
+		panic("impossibile generare chiave di pairing: " + err.Error())
+	}
 	pairingTokenExpiry = time.Now().Add(time.Duration(pairingWindowSeconds) * time.Second)
+}
+
+// encryptPairingPayload cifra il JSON del payload con AES-256-GCM.
+// Risposta servita al client: {"v":2,"nonce":"<b64>","data":"<b64>"}.
+func encryptPairingPayload(plain []byte) (nonceB64, dataB64 string, err error) {
+	block, err := aes.NewCipher(pairingKey)
+	if err != nil {
+		return "", "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", "", err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return "", "", err
+	}
+	ct := gcm.Seal(nil, nonce, plain, nil)
+	return base64.StdEncoding.EncodeToString(nonce),
+		base64.StdEncoding.EncodeToString(ct), nil
 }
 
 // StartPairingServer avvia un server HTTP su pairingAddr (es. "0.0.0.0:4244").
@@ -80,7 +113,10 @@ func StartPairingServer(pairingAddr, tcpAddr, certsDir string) {
 			return
 		}
 
-		// 4. Costruisci e invia il payload
+		// 4. Costruisci il payload e CIFRALO con la chiave del QR.
+		// Il payload contiene la chiave privata mTLS: in chiaro su HTTP
+		// chiunque sniffi la LAN durante la finestra di pairing potrebbe
+		// impersonare il telefono. La chiave AES viaggia solo nel QR.
 		payload, err := buildPairingPayload(tcpAddr, certsDir)
 		if err != nil {
 			atomic.StoreInt32(&pairingUsed, 0) // rollback se errore
@@ -88,12 +124,26 @@ func StartPairingServer(pairingAddr, tcpAddr, certsDir string) {
 			log.Printf("⚠️ Pairing: errore costruzione payload: %v", err)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(payload); err != nil {
-			log.Printf("⚠️ Pairing: errore JSON encode: %v", err)
+		plain, err := json.Marshal(payload)
+		if err == nil {
+			var nonceB64, dataB64 string
+			nonceB64, dataB64, err = encryptPairingPayload(plain)
+			if err == nil {
+				w.Header().Set("Content-Type", "application/json")
+				err = json.NewEncoder(w).Encode(map[string]string{
+					"v":     "2",
+					"nonce": nonceB64,
+					"data":  dataB64,
+				})
+			}
+		}
+		if err != nil {
+			atomic.StoreInt32(&pairingUsed, 0) // rollback se errore
+			http.Error(w, "Errore interno di cifratura", http.StatusInternalServerError)
+			log.Printf("⚠️ Pairing: errore cifratura/encode: %v", err)
 			return
 		}
-		log.Printf("✅ Pairing: configurazione servita con successo a %s", r.RemoteAddr)
+		log.Printf("✅ Pairing: configurazione cifrata servita con successo a %s", r.RemoteAddr)
 	})
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -153,11 +203,11 @@ func buildPairingPayload(tcpAddr, certsDir string) (*PairingPayload, error) {
 	fmt.Sscanf(portStr, "%d", &port)
 
 	return &PairingPayload{
-		IP:  ip,
+		IP:   ip,
 		Port: port,
-		CA:  ca,
-		CRT: crt,
-		Key: key,
+		CA:   ca,
+		CRT:  crt,
+		Key:  key,
 	}, nil
 }
 
@@ -172,14 +222,20 @@ func detectOutboundIP() string {
 	return localAddr.IP.String()
 }
 
-// PrintPairingInfo stampa l'URL di pairing (con token) e, se qrencode è disponibile, anche il QR ASCII
+// PrintPairingInfo stampa l'URL di pairing (con token) e, se qrencode è disponibile, anche il QR ASCII.
+//
+// Il fragment #k= contiene la chiave AES-256 che decifra il payload: i client
+// HTTP NON trasmettono mai il fragment, quindi la chiave esiste solo nel QR.
+// L'IP usa DetectBestIP() (Tailscale se disponibile) — lo stesso del payload:
+// prima l'URL usava l'IP outbound LAN e da remoto il QR risultava irraggiungibile.
 func PrintPairingInfo(pairingAddr string) {
-	ip := detectOutboundIP()
+	ip := DetectBestIP()
 	_, portStr, _ := net.SplitHostPort(pairingAddr)
 	if portStr == "" {
 		portStr = "4244"
 	}
-	pairingURL := fmt.Sprintf("http://%s:%s/pair?token=%s", ip, portStr, pairingToken)
+	pairingURL := fmt.Sprintf("http://%s:%s/pair?token=%s#k=%s",
+		ip, portStr, pairingToken, hex.EncodeToString(pairingKey))
 
 	fmt.Println()
 	fmt.Println("════════════════════════════════════════════════")

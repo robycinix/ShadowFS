@@ -1,309 +1,552 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0A0A0F"
-    android:fillViewport="true">
+    android:background="@color/bg_deep"
+    android:fillViewport="true"
+    android:scrollbars="none">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="28dp">
 
-        <!-- Header -->
+        <!-- ═══════════ HERO ═══════════ -->
+        <FrameLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="28dp">
+
+            <View
+                android:layout_width="92dp"
+                android:layout_height="92dp"
+                android:background="@drawable/bg_hero_glow"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="👻"
+                android:textSize="48sp"
+                android:gravity="center"
+                android:importantForAccessibility="no"/>
+        </FrameLayout>
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/main_title"
-            android:textColor="#E0E0FF"
-            android:textSize="30sp"
+            android:textColor="@color/text_primary"
+            android:textSize="28sp"
             android:textStyle="bold"
-            android:gravity="center"
-            android:paddingTop="16dp"
-            android:paddingBottom="4dp" />
+            android:letterSpacing="0.01"
+            android:gravity="center"/>
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/main_tagline"
-            android:textColor="#8080A0"
-            android:textSize="14sp"
-            android:gravity="center"
-            android:paddingBottom="20dp" />
-
-        <!-- Status principale -->
-        <TextView
-            android:id="@+id/tv_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/status_configure_server"
-            android:textColor="#A0B0FF"
-            android:textSize="14sp"
-            android:gravity="center"
-            android:padding="12dp"
-            android:background="#1A1A2E"
-            android:layout_marginBottom="12dp" />
-
-        <!-- Spazio libero -->
-        <TextView
-            android:id="@+id/tv_space"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/loading"
-            android:textColor="#80C0A0"
+            android:textColor="@color/text_tertiary"
             android:textSize="13sp"
+            android:letterSpacing="0.12"
             android:gravity="center"
-            android:paddingBottom="16dp" />
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="20dp"/>
 
-        <!-- Divider -->
-        <View android:layout_width="match_parent" android:layout_height="1dp"
-            android:background="#2A2A3A" android:layout_marginBottom="16dp"/>
-
-        <!-- Sezione: Configurazione Server -->
-        <TextView
+        <!-- ═══════════ STATUS ═══════════ -->
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/section_server"
-            android:textColor="#8080FF"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.1"
-            android:paddingBottom="8dp"/>
+            app:cardBackgroundColor="@color/bg_surface"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeColor="@color/stroke_subtle"
+            app:strokeWidth="1dp">
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:padding="16dp">
+
+                <View
+                    android:id="@+id/status_dot"
+                    android:layout_width="10dp"
+                    android:layout_height="10dp"
+                    android:background="@drawable/bg_status_dot"
+                    android:layout_marginEnd="12dp"/>
+
+                <TextView
+                    android:id="@+id/tv_status"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/status_configure_server"
+                    android:textColor="@color/text_primary"
+                    android:textSize="14sp"
+                    android:lineSpacingExtra="2dp"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ═══════════ STORAGE + GHOST ═══════════ -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            app:cardBackgroundColor="@color/bg_surface"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeColor="@color/stroke_subtle"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:background="@drawable/bg_icon_badge"
+                        android:padding="7dp"
+                        android:src="@drawable/ic_storage"
+                        app:tint="@color/cyan"
+                        android:contentDescription="@string/storage_card_title"/>
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="12dp"
+                        android:text="@string/storage_card_title"
+                        style="@style/ShadowFS.SectionTitle"/>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tv_space"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/loading"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp"/>
+
+                <ProgressBar
+                    android:id="@+id/progress_storage"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="10dp"
+                    android:layout_marginTop="10dp"
+                    android:max="100"
+                    android:progress="0"
+                    android:progressDrawable="@drawable/progress_storage"/>
+
+                <TextView
+                    android:id="@+id/tv_ghost_summary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text=""
+                    android:textColor="@color/success"
+                    android:textSize="13sp"
+                    android:visibility="gone"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_ghost_list"
+                    style="@style/ShadowFS.Button.Tonal"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="@string/button_ghost_list"
+                    app:icon="@drawable/ic_ghost"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_pinned_folders"
+                    style="@style/ShadowFS.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/button_pinned_folders"
+                    app:icon="@drawable/ic_pin"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ═══════════ DAEMON ═══════════ -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            app:cardBackgroundColor="@color/bg_surface"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeColor="@color/stroke_subtle"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:background="@drawable/bg_icon_badge"
+                        android:padding="7dp"
+                        android:src="@drawable/ic_ghost"
+                        app:tint="@color/spectral_bright"
+                        android:contentDescription="@string/section_daemon_control"/>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="12dp"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/section_daemon_control"
+                            style="@style/ShadowFS.SectionTitle"/>
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/caption_daemon"
+                            style="@style/ShadowFS.SectionCaption"/>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_start_service"
+                    style="@style/ShadowFS.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="@string/button_start_daemon"
+                    app:icon="@drawable/ic_play"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_force_offload"
+                    style="@style/ShadowFS.Button.Danger"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:enabled="false"
+                    android:text="@string/button_force_offload"
+                    app:icon="@drawable/ic_bolt"/>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switch_auto_hydration"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/switch_auto_hydration"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp"
+                    app:thumbTint="@color/text_primary"
+                    app:trackTint="@color/bg_surface_higher"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ═══════════ RASPBERRY PI ═══════════ -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            app:cardBackgroundColor="@color/bg_surface"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeColor="@color/stroke_subtle"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:background="@drawable/bg_icon_badge"
+                        android:padding="7dp"
+                        android:src="@drawable/ic_server"
+                        app:tint="@color/spectral_bright"
+                        android:contentDescription="@string/section_server"/>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="12dp"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/section_server"
+                            style="@style/ShadowFS.SectionTitle"/>
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/caption_server"
+                            style="@style/ShadowFS.SectionCaption"/>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_qr_scan"
+                    style="@style/ShadowFS.Button.Cyan"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="@string/button_qr_pairing"
+                    app:icon="@drawable/ic_qr"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="12dp">
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/ShadowFS.TextInput"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="3"
+                        android:layout_marginEnd="8dp"
+                        android:hint="@string/server_ip_hint">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/et_server_ip"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="text"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:maxLines="1"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/ShadowFS.TextInput"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1.3"
+                        android:hint="@string/server_port_hint">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/et_server_port"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="number"
+                            android:text="4243"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp"
+                            android:maxLines="1"/>
+                    </com.google.android.material.textfield.TextInputLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="6dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_save_config"
+                        style="@style/ShadowFS.Button.Outlined"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="8dp"
+                        android:text="@string/button_save"
+                        app:icon="@drawable/ic_save"/>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_discover"
+                        style="@style/ShadowFS.Button.Outlined"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/button_discover_wifi"
+                        app:icon="@drawable/ic_wifi"/>
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_test_connection"
+                    style="@style/ShadowFS.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/button_test_connection"
+                    app:icon="@drawable/ic_link"/>
+
+                <!-- Stato certificati -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginTop="14dp">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:src="@drawable/ic_shield"
+                        app:tint="@color/text_tertiary"
+                        android:layout_marginEnd="8dp"
+                        android:contentDescription="@string/section_certificates"/>
+
+                    <TextView
+                        android:id="@+id/tv_cert_status"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/certificates_missing"
+                        android:textColor="@color/danger"
+                        android:textSize="12sp"/>
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tv_cert_path"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginStart="26dp"
+                    android:text=""
+                    android:textColor="@color/text_tertiary"
+                    android:textSize="11sp"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ═══════════ PERMESSI ═══════════ -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            app:cardBackgroundColor="@color/bg_surface"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeColor="@color/stroke_subtle"
+            app:strokeWidth="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageView
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:background="@drawable/bg_icon_badge"
+                        android:padding="7dp"
+                        android:src="@drawable/ic_folder_check"
+                        app:tint="@color/warning"
+                        android:contentDescription="@string/section_permissions"/>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="12dp"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/section_permissions"
+                            style="@style/ShadowFS.SectionTitle"/>
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/caption_permissions"
+                            style="@style/ShadowFS.SectionCaption"/>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_permission"
+                    style="@style/ShadowFS.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="@string/button_file_permission_request"
+                    app:icon="@drawable/ic_folder_check"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_battery_opt"
+                    style="@style/ShadowFS.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/button_battery_optimization_disable"
+                    app:icon="@drawable/ic_battery"/>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ═══════════ FOOTER ═══════════ -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
+            android:layout_marginTop="18dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp">
 
-            <EditText
-                android:id="@+id/et_server_ip"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="3"
-                android:hint="@string/server_ip_hint"
-                android:inputType="text"
-                android:textColor="#E0E0FF"
-                android:textColorHint="#505065"
-                android:background="#1A1A2E"
-                android:padding="12dp"
-                android:layout_marginEnd="8dp" />
+            <ImageView
+                android:layout_width="16dp"
+                android:layout_height="16dp"
+                android:layout_marginTop="1dp"
+                android:layout_marginEnd="8dp"
+                android:src="@drawable/ic_info"
+                app:tint="@color/text_tertiary"
+                android:contentDescription="@null"/>
 
-            <EditText
-                android:id="@+id/et_server_port"
+            <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:hint="@string/server_port_hint"
-                android:text="4243"
-                android:inputType="number"
-                android:textColor="#E0E0FF"
-                android:textColorHint="#505065"
-                android:background="#1A1A2E"
-                android:padding="12dp" />
+                android:text="@string/main_footer_info"
+                android:textColor="@color/text_tertiary"
+                android:textSize="11sp"
+                android:lineSpacingExtra="2dp"/>
         </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="8dp">
-
-            <Button
-                android:id="@+id/btn_save_config"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/button_save"
-                android:backgroundTint="#2A3A6A"
-                android:textColor="#A0B8FF"
-                android:layout_marginEnd="8dp"/>
-
-            <Button
-                android:id="@+id/btn_discover"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/button_discover_wifi"
-                android:backgroundTint="#1A3A3A"
-                android:textColor="#60D0D0"/>
-        </LinearLayout>
-
-        <Button
-            android:id="@+id/btn_test_connection"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/button_test_connection"
-            android:backgroundTint="#1A3A2A"
-            android:textColor="#80D0A0"
-            android:layout_marginBottom="8dp" />
-
-        <Button
-            android:id="@+id/btn_qr_scan"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/button_qr_pairing"
-            android:backgroundTint="#2A1A3A"
-            android:textColor="#C080FF"
-            android:layout_marginBottom="16dp" />
-
-        <!-- Divider -->
-        <View android:layout_width="match_parent" android:layout_height="1dp"
-            android:background="#2A2A3A" android:layout_marginBottom="16dp"/>
-
-        <!-- Sezione: Certificati -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/section_certificates"
-            android:textColor="#8080FF"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.1"
-            android:paddingBottom="8dp"/>
-
-        <TextView
-            android:id="@+id/tv_cert_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/certificates_missing"
-            android:textColor="#FF8080"
-            android:textSize="13sp"
-            android:paddingBottom="4dp"/>
-
-        <TextView
-            android:id="@+id/tv_cert_path"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textColor="#606070"
-            android:textSize="11sp"
-            android:layout_marginBottom="16dp"/>
-
-        <!-- Divider -->
-        <View android:layout_width="match_parent" android:layout_height="1dp"
-            android:background="#2A2A3A" android:layout_marginBottom="16dp"/>
-
-        <!-- Sezione: Permessi -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/section_permissions"
-            android:textColor="#8080FF"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.1"
-            android:paddingBottom="8dp"/>
-
-        <Button
-            android:id="@+id/btn_permission"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/button_file_permission_request"
-            android:backgroundTint="#3A2A1A"
-            android:textColor="#FFB060"
-            android:layout_marginBottom="8dp" />
-
-        <Button
-            android:id="@+id/btn_battery_opt"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/button_battery_optimization_disable"
-            android:backgroundTint="#3A2A1A"
-            android:textColor="#FFB060"
-            android:layout_marginBottom="16dp" />
-
-        <!-- Divider -->
-        <View android:layout_width="match_parent" android:layout_height="1dp"
-            android:background="#2A2A3A" android:layout_marginBottom="16dp"/>
-
-        <!-- Sezione: Controllo Daemon -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/section_daemon_control"
-            android:textColor="#8080FF"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.1"
-            android:paddingBottom="8dp"/>
-
-        <Button
-            android:id="@+id/btn_start_service"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/button_start_daemon"
-            android:backgroundTint="#1A3A1A"
-            android:textColor="#80E080"
-            android:layout_marginBottom="8dp" />
-
-        <Button
-            android:id="@+id/btn_force_offload"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/button_force_offload"
-            android:backgroundTint="#3A1A1A"
-            android:textColor="#FF8080"
-            android:enabled="false"
-            android:layout_marginBottom="8dp" />
-
-        <!-- Idratazione automatica all'apertura dei file ghost -->
-        <Switch
-            android:id="@+id/switch_auto_hydration"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/switch_auto_hydration"
-            android:textColor="#C0C0E0"
-            android:textSize="14sp"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp"
-            android:layout_marginBottom="16dp" />
-
-        <!-- Divider -->
-        <View android:layout_width="match_parent" android:layout_height="1dp"
-            android:background="#2A2A3A" android:layout_marginBottom="16dp"/>
-
-        <!-- Pulsante lista file ghostati -->
-        <Button
-            android:id="@+id/btn_ghost_list"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/button_ghost_list"
-            android:backgroundTint="#1A1A3A"
-            android:textColor="#8080FF"
-            android:layout_marginBottom="8dp"/>
-
-        <!-- Pulsante cartelle protette -->
-        <Button
-            android:id="@+id/btn_pinned_folders"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/button_pinned_folders"
-            android:backgroundTint="#1A2A1A"
-            android:textColor="#80C080"
-            android:layout_marginBottom="16dp"/>
-
-        <!-- Sommario spazio recuperato -->
-        <TextView
-            android:id="@+id/tv_ghost_summary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textColor="#80D0A0"
-            android:textSize="13sp"
-            android:gravity="center"
-            android:layout_marginBottom="16dp"/>
-
-        <!-- Footer info -->
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/main_footer_info"
-            android:textColor="#505060"
-            android:textSize="11sp"
-            android:gravity="center"
-            android:paddingBottom="20dp"/>
 
     </LinearLayout>
 </ScrollView>

@@ -39,6 +39,13 @@ class ShadowForegroundService : Service() {
     // Contatore upload attivi (per aggiornare la progress notification)
     private val activeUploads = AtomicInteger(0)
 
+    // Path con un upload già accodato o in corso. CRITICO: lo stesso file può
+    // arrivare a uploadFile() due volte nello stesso ciclo (retry queue +
+    // scansione, oppure FORCE_OFFLOAD mentre gira il timer orario). Senza
+    // questo set il secondo upload partirebbe DOPO il ghosting del primo e
+    // caricherebbe il thumbnail, sovrascrivendo l'originale sul Raspberry.
+    private val inFlightUploads = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     // ----------------------------------------------------------------
     // Retry queue — file in storage interno, una relPath per riga
     // ----------------------------------------------------------------
@@ -72,6 +79,12 @@ class ShadowForegroundService : Service() {
 
     // Cartelle da non toccare mai — lette dinamicamente da SharedPreferences
     private fun pinnedFolders(): Set<String> = ShadowClient.getPinnedFolders(this)
+
+    /** true se [path] è (o sta dentro) una cartella pinned.
+     *  Confronto con separatore: un semplice startsWith bloccherebbe anche
+     *  "/storage/.../Download2" se è pinnata "/storage/.../Download". */
+    private fun isUnderPinned(path: String, pinned: Set<String>): Boolean =
+        pinned.any { p -> path == p || path.startsWith("$p/") }
 
     // Whitelist: ghostiamo SOLO questi tipi di file (media e documenti grandi)
     private val ALLOWED_EXTENSIONS = listOf(".jpg", ".jpeg", ".png", ".mp4", ".mov", ".mkv", ".pdf", ".zip")
@@ -157,11 +170,10 @@ class ShadowForegroundService : Service() {
         if (force || freePercentage < 15.0) {
             val thresholdTime = System.currentTimeMillis() - (3L * 24 * 60 * 60 * 1000) // 3 giorni fa
             val contested = ShadowClient.getContestedFiles(this)
+            val pinned = pinnedFolders() // snapshot: evita una lettura prefs per directory
 
             root.walkTopDown()
-                .onEnter { dir ->
-                    pinnedFolders().none { pinned -> dir.absolutePath.startsWith(pinned) }
-                }
+                .onEnter { dir -> !isUnderPinned(dir.absolutePath, pinned) }
                 .filter { file -> file.isFile }
                 .filter { file ->
                     val ext = "." + file.extension.lowercase()
@@ -183,13 +195,22 @@ class ShadowForegroundService : Service() {
         // --- RE-GHOSTING: ri-ghosta i file idratati temporaneamente dopo 1 ora ---
         val now = System.currentTimeMillis()
         val oneHourMillis = 60L * 60 * 1000
+        val pinnedForReghost = pinnedFolders()
 
         root.walkTopDown()
-            .onEnter { dir -> pinnedFolders().none { p -> dir.absolutePath.startsWith(p) } }
+            .onEnter { dir -> !isUnderPinned(dir.absolutePath, pinnedForReghost) }
             .filter { file -> file.isFile && file.name.endsWith(".reghost") }
             .forEach { markerFile ->
                 try {
-                    val hydrationTime = markerFile.readText().toLongOrNull() ?: 0L
+                    // Formato marker: riga 1 = timestamp idratazione;
+                    // riga opzionale "checksum=<hex>" = SHA-256 del contenuto
+                    // idratato (identico a quello sul Raspberry).
+                    val markerLines = markerFile.readLines()
+                    val hydrationTime = markerLines.firstOrNull()?.trim()?.toLongOrNull() ?: 0L
+                    val storedChecksum = markerLines
+                        .firstOrNull { it.startsWith("checksum=") }
+                        ?.removePrefix("checksum=")
+
                     if (force || (now - hydrationTime > oneHourMillis)) {
                         val originalFileName = markerFile.name.removeSuffix(".reghost")
                         val originalFile = File(markerFile.parentFile, originalFileName)
@@ -202,9 +223,25 @@ class ShadowForegroundService : Service() {
                                 val relPath = originalFile.absolutePath
                                     .removePrefix(monitoredDir).trimStart('/')
 
+                                val currentSha = ShadowClient.sha256Bytes(originalFile)
+                                val currentHex = currentSha.joinToString("") { "%02x".format(it) }
+
                                 hydrationManager.suppressHydration(originalFile.absolutePath)
-                                uploadFile(originalFile, relPath, isRetry = false) { success ->
-                                    if (success) markerFile.delete()
+                                if (storedChecksum != null &&
+                                    storedChecksum.equals(currentHex, ignoreCase = true)) {
+                                    // Contenuto identico a quello già sul Raspberry:
+                                    // re-ghost locale immediato, ZERO upload. Prima
+                                    // ogni file idratato veniva ricaricato per intero
+                                    // a ogni ciclo anche se invariato.
+                                    vfsManager.markAsGhost(this, originalFile, currentHex)
+                                    markerFile.delete()
+                                    android.util.Log.i("ShadowFS",
+                                        "Re-ghost senza upload (checksum identico): $relPath")
+                                } else {
+                                    uploadFile(originalFile, relPath, isRetry = false,
+                                        precomputedSha = currentSha) { success ->
+                                        if (success) markerFile.delete()
+                                    }
                                 }
                             } else {
                                 android.util.Log.d("ShadowFS", "File $originalFileName recente — re-ghosting rimandato")
@@ -228,9 +265,10 @@ class ShadowForegroundService : Service() {
 
     private fun reconcileRestoredGhosts(root: File) {
         val contested = ShadowClient.getContestedFiles(this)
+        val pinned = pinnedFolders()
 
         root.walkTopDown()
-            .onEnter { dir -> pinnedFolders().none { p -> dir.absolutePath.startsWith(p) } }
+            .onEnter { dir -> !isUnderPinned(dir.absolutePath, pinned) }
             .filter { it.isFile && it.name.endsWith(".shadow") }
             .forEach { marker ->
                 try {
@@ -292,7 +330,7 @@ class ShadowForegroundService : Service() {
     private fun notifyContestedFile(fileName: String) {
         val text = getString(R.string.notif_contested_text, fileName)
         val notif = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
+            .setSmallIcon(R.drawable.ic_ghost)
             .setContentTitle(getString(R.string.notif_contested_title))
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -341,12 +379,22 @@ class ShadowForegroundService : Service() {
             return
         }
         val showProgress = fileSize > 5 * 1024 * 1024 // progress solo per file > 5 MB
+
+        // Dedup: un solo upload accodato/in corso per file. Se è già in volo,
+        // questo secondo tentativo è superfluo (e pericoloso, vedi inFlightUploads).
+        if (!inFlightUploads.add(file.absolutePath)) {
+            android.util.Log.i("ShadowFS", "Skip upload: già accodato o in corso: $relPath")
+            onDone?.invoke(false)
+            return
+        }
         activeUploads.incrementAndGet()
 
         // Snapshot pre-upload: se il file cambia DURANTE l'upload (es. foto modificata
         // dall'utente), sul server è finita la versione vecchia. Ghostare adesso
         // distruggerebbe la versione nuova → in quel caso si salta il ghosting e si
         // lascia il file in coda per un upload aggiornato al prossimo ciclo.
+        // Lo snapshot viene passato anche a ShadowClient.upload, che lo ri-verifica
+        // al momento dell'ESECUZIONE (seconda barriera contro il doppio accodamento).
         val sizeBeforeUpload = fileSize
         val mtimeBeforeUpload = file.lastModified()
 
@@ -357,8 +405,11 @@ class ShadowForegroundService : Service() {
             onProgress = if (showProgress) { transferred, total ->
                 updateTransferNotification(file.name, transferred, total)
             } else null,
-            precomputedSha = precomputedSha
+            precomputedSha = precomputedSha,
+            expectedSize = sizeBeforeUpload,
+            expectedMtime = mtimeBeforeUpload
         ) { success, checksumHex ->
+            inFlightUploads.remove(file.absolutePath)
             activeUploads.decrementAndGet()
             if (activeUploads.get() == 0) dismissTransferNotification()
 
@@ -385,7 +436,7 @@ class ShadowForegroundService : Service() {
     private fun updateTransferNotification(fileName: String, transferred: Long, total: Long) {
         val progress = if (total > 0) ((transferred * 100) / total).toInt() else 0
         val notif = NotificationCompat.Builder(this, CHANNEL_TRANSFER_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_upload)
+            .setSmallIcon(R.drawable.ic_upload)
             .setContentTitle(getString(R.string.notif_upload_title))
             .setContentText("$fileName  ${formatSize(transferred)} / ${formatSize(total)}")
             .setProgress(100, progress, false)
@@ -413,7 +464,7 @@ class ShadowForegroundService : Service() {
         lastUnreachableNotifTime = now
 
         val notif = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setSmallIcon(R.drawable.ic_alert)
             .setContentTitle(getString(R.string.notif_unreachable_title))
             .setContentText(getString(R.string.notif_unreachable_text))
             .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
@@ -451,7 +502,7 @@ class ShadowForegroundService : Service() {
     private fun createNotification() = NotificationCompat.Builder(this, CHANNEL_ID)
         .setContentTitle(getString(R.string.notif_service_title))
         .setContentText(getString(R.string.notif_service_text))
-        .setSmallIcon(android.R.drawable.sym_def_app_icon)
+        .setSmallIcon(R.drawable.ic_ghost)
         .setPriority(NotificationCompat.PRIORITY_LOW)
         .build()
 

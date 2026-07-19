@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cornice di scansione QR: quattro angoli luminosi -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="240dp" android:height="240dp"
+    android:viewportWidth="240" android:viewportHeight="240">
+    <path
+        android:strokeColor="@color/cyan"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M4,56 V24 a20,20 0 0 1 20,-20 H56 M184,4 h32 a20,20 0 0 1 20,20 V56 M236,184 v32 a20,20 0 0 1 -20,20 H184 M56,236 H24 a20,20 0 0 1 -20,-20 V184"/>
+</vector>

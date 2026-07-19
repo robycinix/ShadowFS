@@ -149,13 +149,20 @@ class HydrationManager(private val context: Context, private val rootDir: String
                 if (path == null) return
                 val file = File(directory, path)
 
+                // CRITICO: inotify aggiunge il bit IN_ISDIR (0x40000000) agli
+                // eventi sulle directory, quindi "event == CREATE" non matcha MAI
+                // per una cartella nuova → senza maschera le cartelle create dopo
+                // l'avvio (nuovi album, WhatsApp Images del mese...) non verrebbero
+                // mai osservate e i loro ghost non si idraterebbero.
+                val ev = event and ALL_EVENTS
+
                 // Nuova cartella creata dinamicamente → aggiungi osservatore
-                if (event == CREATE && file.isDirectory) {
+                if (ev == CREATE && file.isDirectory) {
                     watchDirectoryRecursive(file)
                     return
                 }
 
-                if (event == OPEN) {
+                if (ev == OPEN) {
                     // Filtro 1: schermo spento = processo di sistema
                     if (!isScreenOn()) return
 
@@ -249,13 +256,23 @@ class HydrationManager(private val context: Context, private val rootDir: String
         // CONNESSIONE REALE al Raspberry Pi tramite TLS+mTLS
         ShadowClient.download(context, relPath, file) { success ->
             if (success) {
-                // Rimuovi il marker .shadow (file idratato con successo)
+                // Recupera il checksum dal marker .shadow PRIMA di cancellarlo:
+                // finisce nel .reghost e permette al ciclo di re-ghosting di
+                // saltare l'upload se il contenuto è rimasto identico a quello
+                // già presente sul Raspberry (zero traffico).
                 val shadowMeta = File(file.parent, file.name + ".shadow")
+                val checksum = try {
+                    shadowMeta.readLines()
+                        .firstOrNull { it.startsWith("checksum=") }
+                        ?.removePrefix("checksum=")
+                } catch (_: Exception) { null }
                 shadowMeta.delete()
 
                 // Crea il marker .reghost: il daemon ri-ghosterà questo file tra 1 ora
-                File(file.parent, file.name + ".reghost")
-                    .writeText(System.currentTimeMillis().toString())
+                File(file.parent, file.name + ".reghost").writeText(buildString {
+                    append(System.currentTimeMillis().toString())
+                    if (checksum != null) append("\nchecksum=$checksum")
+                })
 
                 // Rendi il file nuovamente visibile a Gallery e Google Photos.
                 // IS_PENDING=0 → la foto riappare in Gallery con il contenuto completo.
@@ -306,7 +323,7 @@ class HydrationManager(private val context: Context, private val rootDir: String
 
     private fun showHydratingNotification(id: Int, fileName: String) {
         val notif = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setSmallIcon(R.drawable.ic_restore)
             .setContentTitle("ShadowFS")
             .setContentText(context.getString(R.string.notif_hydrating_text, fileName))
             .setProgress(100, 0, true)
@@ -317,7 +334,7 @@ class HydrationManager(private val context: Context, private val rootDir: String
 
     private fun showCompletionNotification(id: Int, fileName: String) {
         val notif = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setSmallIcon(R.drawable.ic_check)
             .setContentTitle("ShadowFS")
             .setContentText(context.getString(R.string.notif_hydration_done_text, fileName))
             .setProgress(0, 0, false)
@@ -330,7 +347,7 @@ class HydrationManager(private val context: Context, private val rootDir: String
     private fun showBudgetExceededNotification() {
         val text = context.getString(R.string.notif_hydration_budget_text)
         val notif = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
+            .setSmallIcon(R.drawable.ic_ghost)
             .setContentTitle(context.getString(R.string.notif_hydration_budget_title))
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
@@ -342,7 +359,7 @@ class HydrationManager(private val context: Context, private val rootDir: String
 
     private fun showFailureNotification(id: Int, fileName: String) {
         val notif = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setSmallIcon(R.drawable.ic_alert)
             .setContentTitle(context.getString(R.string.notif_shadowfs_error_title))
             .setContentText(context.getString(R.string.notif_hydration_failed_text, fileName))
             .setPriority(NotificationCompat.PRIORITY_HIGH)

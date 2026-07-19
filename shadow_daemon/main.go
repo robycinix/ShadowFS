@@ -14,11 +14,9 @@ func main() {
 	addDevice := flag.String("add-device", "", "Genera certificati per un nuovo dispositivo (es: --add-device=telefono_mario)")
 	storagePath := flag.String("storage", "./shadow_root", "Percorso directory storage per i file offloaded")
 	dbPath := flag.String("db", "shadowfs.db", "Percorso database SQLite")
-	quicAddr    := flag.String("addr", "0.0.0.0:4242", "Indirizzo UDP per QUIC sperimentale (non avviato)")
-	tcpAddr     := flag.String("tcp-addr", "0.0.0.0:4243", "Indirizzo TCP+TLS per il client Android")
+	tcpAddr := flag.String("tcp-addr", "0.0.0.0:4243", "Indirizzo TCP+TLS per il client Android")
 	pairingAddr := flag.String("pairing-addr", "0.0.0.0:4244", "Indirizzo HTTP per il pairing QR Code")
 	serverIPsStr := flag.String("server-ip", "", "IP del server da aggiungere al certificato TLS (es: 100.80.33.12). Più IP separati da virgola.")
-	_ = quicAddr // QUIC è parcheggiato: TCP+mTLS è la via supportata per Android.
 
 	flag.Parse()
 

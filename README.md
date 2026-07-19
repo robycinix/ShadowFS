@@ -216,6 +216,19 @@ Issues, bug reports and focused pull requests are welcome. Please read
 [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR. This project handles
 local files, so data-loss safety matters more than cosmetic speed.
 
+## Disclaimer and Responsibility
+
+ShadowFS is provided **as is**, without warranties of any kind. The project is
+designed to reduce risk by verifying transfers before changing local files, but
+it cannot guarantee protection from hardware failure, misconfiguration,
+accidental deletion, filesystem corruption, interrupted deployments, cloud-sync
+conflicts, or any other condition outside the software's control.
+
+Use ShadowFS first with non-critical files, validate upload and restore flows on
+your own devices, and always keep a separate backup of important data. By using
+the software, you accept responsibility for how it is configured and for the
+files you choose to manage with it.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

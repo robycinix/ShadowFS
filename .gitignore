@@ -36,3 +36,5 @@ shadow_daemon/certs_for_android*/
 *.tmp
 *.part
 
+# Local website build/content
+sito/

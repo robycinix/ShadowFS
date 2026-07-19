@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#000000">
+    android:background="@color/black">
 
     <!-- Anteprima camera -->
     <androidx.camera.view.PreviewView
@@ -10,30 +11,61 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"/>
 
-    <!-- Overlay istruzioni -->
+    <!-- Cornice di scansione centrata -->
+    <ImageView
+        android:layout_width="240dp"
+        android:layout_height="240dp"
+        android:layout_gravity="center"
+        android:src="@drawable/qr_scan_frame"
+        android:contentDescription="@null"/>
+
+    <!-- Toolbar trasparente -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/qr_toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="@android:color/transparent"
+        app:navigationIcon="@drawable/ic_back"
+        app:navigationIconTint="@color/white"
+        app:title="@string/qr_scan_title"
+        app:titleTextColor="@color/white"/>
+
+    <!-- Pannello istruzioni -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:orientation="vertical"
-        android:background="#CC000000"
-        android:padding="24dp">
+        android:background="@drawable/bg_scrim_bottom"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="56dp"
+        android:paddingBottom="36dp"
+        android:gravity="center_horizontal">
+
+        <ImageView
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:src="@drawable/ic_qr"
+            app:tint="@color/cyan"
+            android:contentDescription="@null"/>
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
             android:text="@string/qr_scan_instruction"
-            android:textColor="#E0E0FF"
+            android:textColor="@color/text_primary"
             android:textSize="15sp"
-            android:gravity="center"
-            android:paddingBottom="8dp"/>
+            android:gravity="center"/>
 
         <TextView
             android:id="@+id/tv_scan_status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
             android:text="@string/qr_scan_waiting"
-            android:textColor="#8080A0"
+            android:textColor="@color/text_secondary"
             android:textSize="13sp"
             android:gravity="center"/>
     </LinearLayout>

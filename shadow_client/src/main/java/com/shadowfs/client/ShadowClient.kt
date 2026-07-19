@@ -1,6 +1,11 @@
 package com.shadowfs.client
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Environment
+import android.os.PowerManager
 import android.util.Base64
 import android.util.Log
 import java.io.*
@@ -168,6 +173,60 @@ object ShadowClient {
         networkExecutor = newNetworkExecutor()
     }
 
+    // ----------------------------------------------------------------
+    // Audit permessi — ricontrolla in qualsiasi momento i permessi necessari
+    // ----------------------------------------------------------------
+
+    /**
+     * Stato dei permessi richiesti dall'app.
+     * [storageAllFiles] e [notifications] sono critici per il funzionamento;
+     * [batteryUnrestricted] e [camera] sono raccomandati/opzionali.
+     */
+    data class PermissionStatus(
+        val storageAllFiles: Boolean,    // MANAGE_EXTERNAL_STORAGE — ghosting
+        val notifications: Boolean,      // POST_NOTIFICATIONS — foreground service (Android 13+)
+        val batteryUnrestricted: Boolean,// esenzione ottimizzazione batteria
+        val camera: Boolean              // pairing via QR (serve solo al momento dello scan)
+    ) {
+        /** true se tutti i permessi critici sono concessi */
+        val allCriticalGranted: Boolean get() = storageAllFiles && notifications
+
+        /** Elenco leggibile dei permessi mancanti (vuoto = tutto ok) */
+        val missing: List<String> get() = buildList {
+            if (!storageAllFiles)     add("Accesso a tutti i file")
+            if (!notifications)       add("Notifiche")
+            if (!batteryUnrestricted) add("Esenzione ottimizzazione batteria")
+            if (!camera)              add("Fotocamera (pairing QR)")
+        }
+    }
+
+    /**
+     * Ricontrolla tutti i permessi necessari. Sicura da chiamare in qualsiasi
+     * momento (onCreate, onResume, prima di avviare il service): non lancia
+     * mai richieste all'utente, fa solo verifica.
+     */
+    fun checkRequiredPermissions(context: Context): PermissionStatus {
+        val storage = Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
+            Environment.isExternalStorageManager()
+
+        val notifications = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED
+
+        val battery = Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
+            context.getSystemService(PowerManager::class.java)
+                ?.isIgnoringBatteryOptimizations(context.packageName) == true
+
+        val camera = context.checkSelfPermission(Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+
+        return PermissionStatus(storage, notifications, battery, camera).also {
+            if (!it.allCriticalGranted) {
+                Log.w(TAG, "Permessi mancanti: ${it.missing.joinToString()}")
+            }
+        }
+    }
+
     fun getCertsDir(context: Context): File =
         File(context.filesDir, PRIVATE_CERTS_DIR)
 
@@ -186,11 +245,25 @@ object ShadowClient {
         val legacyDir = File(CERTS_DIR)
         if (!hasCertTriplet(legacyDir)) return
 
-        privateDir.mkdirs()
-        listOf("ca.crt", "client.crt", "client.key").forEach { name ->
-            File(legacyDir, name).copyTo(File(privateDir, name), overwrite = true)
+        // Su Android 11+ (scoped storage) i file in Download creati da adb o da
+        // un'altra app possono risultare visibili (exists() == true) ma NON leggibili:
+        // copyTo() lancia FileNotFoundException EACCES. La migrazione è best-effort:
+        // se fallisce, si ripiega sul pairing via QR senza far crashare l'app.
+        try {
+            privateDir.mkdirs()
+            listOf("ca.crt", "client.crt", "client.key").forEach { name ->
+                File(legacyDir, name).copyTo(File(privateDir, name), overwrite = true)
+            }
+            Log.i(TAG, "Certificati migrati nello storage privato: ${privateDir.absolutePath}")
+        } catch (e: Exception) {
+            Log.w(TAG, "Migrazione certificati legacy fallita (${e.message}). " +
+                    "Usa il pairing via QR per riconfigurare.", e)
+            // Rimuove eventuali copie parziali: un triplet incompleto/corrotto
+            // farebbe fallire il TLS in modo più oscuro in seguito.
+            listOf("ca.crt", "client.crt", "client.key").forEach { name ->
+                File(privateDir, name).delete()
+            }
         }
-        Log.i(TAG, "Certificati migrati nello storage privato: ${privateDir.absolutePath}")
     }
 
     /** Verifica che tutti e tre i file certificato esistano nello storage privato */
@@ -230,6 +303,14 @@ object ShadowClient {
      * [relPath] è il percorso relativo alla root monitorata
      * (es. "DCIM/Camera/video.mp4", NON il percorso assoluto Android).
      * Il callback viene eseguito in un thread di background.
+     *
+     * [expectedSize]/[expectedMtime]: snapshot del file al momento dell'ACCODAMENTO.
+     * L'upload viene eseguito su un executor seriale, quindi tra l'accodamento e
+     * l'esecuzione possono passare minuti: se nel frattempo il file è stato
+     * ghostato da un upload precedente (doppio accodamento), senza questo guard
+     * verrebbe trasmesso il THUMBNAIL, sovrascrivendo l'originale sul Raspberry
+     * — perdita dati irreversibile. Su mismatch l'upload abortisce PRIMA di
+     * aprire la connessione.
      */
     fun upload(
         context: Context,
@@ -237,19 +318,41 @@ object ShadowClient {
         relPath: String,
         onProgress: ((transferred: Long, total: Long) -> Unit)? = null,
         precomputedSha: ByteArray? = null,
+        expectedSize: Long? = null,
+        expectedMtime: Long? = null,
         onResult: (success: Boolean, sha256Hex: String?) -> Unit
     ) {
         networkExecutor.submit {
-            try {
-                val ip = getServerIp(context)
-                val port = getServerPort(context)
-                if (ip.isEmpty()) {
-                    Log.e(TAG, "IP server non configurato.")
-                    onResult(false, null)
-                    return@submit
-                }
+            val ip = getServerIp(context)
+            val port = getServerPort(context)
+            if (ip.isEmpty()) {
+                Log.e(TAG, "IP server non configurato.")
+                onResult(false, null)
+                return@submit
+            }
 
+            // Guard CRITICO anti doppio-accodamento: il contenuto attuale deve
+            // essere ancora quello che il chiamante intendeva caricare.
+            if (expectedSize != null &&
+                (file.length() != expectedSize ||
+                    (expectedMtime != null && file.lastModified() != expectedMtime))) {
+                Log.w(TAG, "⛔ Upload annullato: file cambiato dopo l'accodamento " +
+                        "(${file.length()} vs $expectedSize bytes) — $relPath")
+                onResult(false, null)
+                return@submit
+            }
+
+            // Esito calcolato nel try, callback invocato UNA SOLA VOLTA fuori dal
+            // try: se onResult stesso lancia, il catch non deve produrre una
+            // seconda invocazione con esito opposto.
+            var uploadOk = false
+            var shaHex: String? = null
+            try {
                 val fileSize = file.length()
+                val pathBytes = relPath.toByteArray(Charsets.UTF_8)
+                // Il server rifiuta path >4096 byte chiudendo la connessione: meglio
+                // fallire qui con un errore chiaro che con un EOF criptico.
+                require(pathBytes.size in 1..4096) { "relPath fuori range (${pathBytes.size} bytes): $relPath" }
                 // Il checksum può arrivare precomputato (es. dalla riconciliazione
                 // dei ghost ripristinati) per evitare di hashare due volte file grandi.
                 val checksum = precomputedSha ?: sha256Bytes(file)
@@ -259,7 +362,6 @@ object ShadowClient {
                     val out = BufferedOutputStream(ssl.outputStream)
                     val dataOut = DataOutputStream(out)
                     val inp = DataInputStream(ssl.inputStream)
-                    val pathBytes = relPath.toByteArray(Charsets.UTF_8)
 
                     // ── Fase 1: invia header (cmd + path + size + checksum) ────────────
                     dataOut.write(CMD_UPLOAD.toInt())
@@ -308,11 +410,12 @@ object ShadowClient {
                 }
 
                 Log.i(TAG, "✅ Upload completato e verificato dal server: $relPath")
-                onResult(true, checksum.joinToString("") { "%02x".format(it) })
+                uploadOk = true
+                shaHex = checksum.joinToString("") { "%02x".format(it) }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Upload fallito per '$relPath': ${e.message}", e)
-                onResult(false, null)
             }
+            onResult(uploadOk, shaHex)
         }
     }
 
@@ -329,90 +432,97 @@ object ShadowClient {
      */
     fun download(context: Context, relPath: String, destFile: File, onResult: (Boolean) -> Unit) {
         networkExecutor.submit {
+            // Esito calcolato nel try, callback invocato UNA SOLA VOLTA alla fine:
+            // se onResult stesso lancia, il catch non deve produrre una seconda
+            // invocazione con esito opposto.
+            var ok = false
             try {
-                val ip = getServerIp(context)
-                val port = getServerPort(context)
-                if (ip.isEmpty()) {
-                    Log.e(TAG, "IP server non configurato.")
-                    onResult(false)
-                    return@submit
-                }
-
-                Log.i(TAG, "Download ← $ip:$port | $relPath")
-
-                val tmpFile = File(destFile.parentFile, destFile.name + ".shadowdl.tmp")
-                val resumeOffset = if (tmpFile.exists()) tmpFile.length() else 0L
-                if (resumeOffset > 0L) {
-                    Log.i(TAG, "🔄 Resume download da offset $resumeOffset per $relPath")
-                }
-
-                createSSLSocket(context, ip, port).use { ssl ->
-                    val out = BufferedOutputStream(ssl.outputStream)
-                    val dataOut = DataOutputStream(out)
-                    val inp = DataInputStream(ssl.inputStream)
-                    val pathBytes = relPath.toByteArray(Charsets.UTF_8)
-
-                    dataOut.write(CMD_DOWNLOAD.toInt())
-                    dataOut.write((pathBytes.size shr 8) and 0xFF)
-                    dataOut.write(pathBytes.size and 0xFF)
-                    dataOut.write(pathBytes)
-                    dataOut.writeLong(resumeOffset)
-                    dataOut.flush()
-                    // Non chiamiamo shutdownOutput: il server risponde subito dopo aver letto
-
-                    val status = inp.read()
-                    if (status == 1) {
-                        val fileSize = inp.readLong()
-                        if (fileSize < 0L) {
-                            Log.e(TAG, "❌ Dimensione download non valida per $relPath: $fileSize")
-                            tmpFile.delete()
-                            onResult(false)
-                            return@use
-                        }
-                        val expectedChecksum = ByteArray(32)
-                        inp.readFully(expectedChecksum)
-
-                        val safeOffset = if (resumeOffset <= fileSize) resumeOffset else 0L
-                        if (safeOffset == 0L && tmpFile.exists()) {
-                            tmpFile.delete()
-                        }
-
-                        FileOutputStream(tmpFile, safeOffset > 0L).buffered(65536).use { fos ->
-                            copyExactly(inp, fos, fileSize - safeOffset)
-                        }
-
-                        if (tmpFile.length() != fileSize) {
-                            Log.e(TAG, "❌ Download incompleto: ${tmpFile.length()} / $fileSize bytes per $relPath")
-                            onResult(false)
-                            return@use
-                        }
-
-                        val actualChecksum = sha256Bytes(tmpFile)
-                        if (!actualChecksum.contentEquals(expectedChecksum)) {
-                            Log.e(TAG, "❌ Checksum download non valido per $relPath")
-                            tmpFile.delete()
-                            onResult(false)
-                            return@use
-                        }
-
-                        if (!replaceFile(tmpFile, destFile)) {
-                            Log.e(TAG, "❌ Impossibile pubblicare download verificato per $relPath")
-                            onResult(false)
-                            return@use
-                        }
-
-                        Log.i(TAG, "✅ Download completato: $relPath (${destFile.length()} bytes)")
-                        onResult(true)
-                    } else {
-                        Log.e(TAG, "❌ File non trovato sul daemon: $relPath")
-                        tmpFile.delete()
-                        onResult(false)
-                    }
-                }
+                ok = performDownload(context, relPath, destFile)
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Download fallito per '$relPath': ${e.message}", e)
-                onResult(false)
             }
+            onResult(ok)
+        }
+    }
+
+    private fun performDownload(context: Context, relPath: String, destFile: File): Boolean {
+        val ip = getServerIp(context)
+        val port = getServerPort(context)
+        if (ip.isEmpty()) {
+            Log.e(TAG, "IP server non configurato.")
+            return false
+        }
+
+        val pathBytes = relPath.toByteArray(Charsets.UTF_8)
+        // Il server rifiuta path >4096 byte chiudendo la connessione: meglio
+        // fallire qui con un errore chiaro che con un EOF criptico.
+        require(pathBytes.size in 1..4096) { "relPath fuori range (${pathBytes.size} bytes): $relPath" }
+
+        Log.i(TAG, "Download ← $ip:$port | $relPath")
+
+        val tmpFile = File(destFile.parentFile, destFile.name + ".shadowdl.tmp")
+        val resumeOffset = if (tmpFile.exists()) tmpFile.length() else 0L
+        if (resumeOffset > 0L) {
+            Log.i(TAG, "🔄 Resume download da offset $resumeOffset per $relPath")
+        }
+
+        createSSLSocket(context, ip, port).use { ssl ->
+            val out = BufferedOutputStream(ssl.outputStream)
+            val dataOut = DataOutputStream(out)
+            val inp = DataInputStream(ssl.inputStream)
+
+            dataOut.write(CMD_DOWNLOAD.toInt())
+            dataOut.write((pathBytes.size shr 8) and 0xFF)
+            dataOut.write(pathBytes.size and 0xFF)
+            dataOut.write(pathBytes)
+            dataOut.writeLong(resumeOffset)
+            dataOut.flush()
+            // Non chiamiamo shutdownOutput: il server risponde subito dopo aver letto
+
+            val status = inp.read()
+            if (status != 1) {
+                Log.e(TAG, "❌ File non trovato sul daemon: $relPath")
+                tmpFile.delete()
+                return false
+            }
+
+            val fileSize = inp.readLong()
+            if (fileSize < 0L) {
+                Log.e(TAG, "❌ Dimensione download non valida per $relPath: $fileSize")
+                tmpFile.delete()
+                return false
+            }
+            val expectedChecksum = ByteArray(32)
+            inp.readFully(expectedChecksum)
+
+            val safeOffset = if (resumeOffset <= fileSize) resumeOffset else 0L
+            if (safeOffset == 0L && tmpFile.exists()) {
+                tmpFile.delete()
+            }
+
+            FileOutputStream(tmpFile, safeOffset > 0L).buffered(65536).use { fos ->
+                copyExactly(inp, fos, fileSize - safeOffset)
+            }
+
+            if (tmpFile.length() != fileSize) {
+                Log.e(TAG, "❌ Download incompleto: ${tmpFile.length()} / $fileSize bytes per $relPath")
+                return false
+            }
+
+            val actualChecksum = sha256Bytes(tmpFile)
+            if (!actualChecksum.contentEquals(expectedChecksum)) {
+                Log.e(TAG, "❌ Checksum download non valido per $relPath")
+                tmpFile.delete()
+                return false
+            }
+
+            if (!replaceFile(tmpFile, destFile)) {
+                Log.e(TAG, "❌ Impossibile pubblicare download verificato per $relPath")
+                return false
+            }
+
+            Log.i(TAG, "✅ Download completato: $relPath (${destFile.length()} bytes)")
+            return true
         }
     }
 
@@ -427,41 +537,44 @@ object ShadowClient {
      */
     fun delete(context: Context, relPath: String, localFile: File, onResult: (Boolean) -> Unit) {
         networkExecutor.submit {
+            // Callback invocato una sola volta, fuori dal try (vedi upload/download).
+            var ok = false
             try {
                 val ip = getServerIp(context)
                 val port = getServerPort(context)
-                if (ip.isEmpty()) { onResult(false); return@submit }
+                if (ip.isNotEmpty()) {
+                    Log.i(TAG, "Delete → $ip:$port | $relPath")
 
-                Log.i(TAG, "Delete → $ip:$port | $relPath")
-
-                val serverOk = createSSLSocket(context, ip, port).use { ssl ->
-                    val out = ssl.outputStream
                     val pathBytes = relPath.toByteArray(Charsets.UTF_8)
+                    require(pathBytes.size in 1..4096) { "relPath fuori range: $relPath" }
 
-                    out.write(CMD_DELETE.toInt())
-                    out.write((pathBytes.size shr 8) and 0xFF)
-                    out.write(pathBytes.size and 0xFF)
-                    out.write(pathBytes)
-                    out.flush()
+                    val serverOk = createSSLSocket(context, ip, port).use { ssl ->
+                        val out = ssl.outputStream
 
-                    ssl.inputStream.read() == 1
-                }
+                        out.write(CMD_DELETE.toInt())
+                        out.write((pathBytes.size shr 8) and 0xFF)
+                        out.write(pathBytes.size and 0xFF)
+                        out.write(pathBytes)
+                        out.flush()
 
-                if (serverOk) {
-                    // Elimina file ghost + marker .shadow dal telefono
-                    localFile.delete()
-                    File(localFile.parent, localFile.name + ".shadow").delete()
-                    File(localFile.parent, localFile.name + ".reghost").delete()
-                    Log.i(TAG, "✅ Delete completato: $relPath")
-                    onResult(true)
-                } else {
-                    Log.e(TAG, "❌ Delete rifiutato dal server: $relPath")
-                    onResult(false)
+                        ssl.inputStream.read() == 1
+                    }
+
+                    if (serverOk) {
+                        // Elimina file ghost + marker .shadow dal telefono
+                        localFile.delete()
+                        File(localFile.parent, localFile.name + ".shadow").delete()
+                        File(localFile.parent, localFile.name + ".reghost").delete()
+                        Log.i(TAG, "✅ Delete completato: $relPath")
+                        ok = true
+                    } else {
+                        Log.e(TAG, "❌ Delete rifiutato dal server: $relPath")
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "❌ Delete fallito per '$relPath': ${e.message}", e)
-                onResult(false)
             }
+            onResult(ok)
         }
     }
 
@@ -472,57 +585,64 @@ object ShadowClient {
 
     fun syncIndex(context: Context, phoneFiles: List<String>, onResult: (List<String>) -> Unit) {
         networkExecutor.submit {
+            // Callback invocato una sola volta, fuori dal try (vedi upload/download).
+            var result: List<String> = emptyList()
             try {
                 val ip = getServerIp(context)
                 val port = getServerPort(context)
-                if (ip.isEmpty()) { onResult(emptyList()); return@submit }
-
-                Log.i(TAG, "SyncIndex → $ip:$port | ${phoneFiles.size} file sul telefono")
-
-                val orphans = mutableListOf<String>()
-
-                createSSLSocket(context, ip, port).use { ssl ->
-                    val out = ssl.outputStream
-                    val inp = ssl.inputStream
-
-                    // Invia comando + count (4 byte big-endian)
-                    val count = phoneFiles.size
-                    out.write(CMD_SYNC_INDEX.toInt())
-                    out.write(count shr 24 and 0xFF)
-                    out.write(count shr 16 and 0xFF)
-                    out.write(count shr 8 and 0xFF)
-                    out.write(count and 0xFF)
-
-                    // Invia ogni path
-                    for (path in phoneFiles) {
-                        val pathBytes = path.toByteArray(Charsets.UTF_8)
-                        out.write(pathBytes.size shr 8 and 0xFF)
-                        out.write(pathBytes.size and 0xFF)
-                        out.write(pathBytes)
+                if (ip.isNotEmpty()) {
+                    // Il server abortisce la sync su pathLen fuori range: filtra qui
+                    // i path anomali invece di far fallire l'intero scambio.
+                    val validFiles = phoneFiles.filter {
+                        it.toByteArray(Charsets.UTF_8).size in 1..4096
                     }
-                    out.flush()
+                    Log.i(TAG, "SyncIndex → $ip:$port | ${validFiles.size} file sul telefono")
 
-                    // Legge count orfani (4 byte).
-                    // CRITICO: inp.read() può restituire meno byte del richiesto su TCP.
-                    // DataInputStream.readFully garantisce la lettura completa.
-                    val din = DataInputStream(inp)
-                    val orphanCount = din.readInt()
+                    val orphans = mutableListOf<String>()
 
-                    // Legge ogni path orfano
-                    repeat(orphanCount) {
-                        val pathLen = din.readUnsignedShort()
-                        val pathBuf = ByteArray(pathLen)
-                        din.readFully(pathBuf)
-                        orphans.add(String(pathBuf, Charsets.UTF_8))
+                    createSSLSocket(context, ip, port).use { ssl ->
+                        val out = ssl.outputStream
+                        val inp = ssl.inputStream
+
+                        // Invia comando + count (4 byte big-endian)
+                        val count = validFiles.size
+                        out.write(CMD_SYNC_INDEX.toInt())
+                        out.write(count shr 24 and 0xFF)
+                        out.write(count shr 16 and 0xFF)
+                        out.write(count shr 8 and 0xFF)
+                        out.write(count and 0xFF)
+
+                        // Invia ogni path
+                        for (path in validFiles) {
+                            val pathBytes = path.toByteArray(Charsets.UTF_8)
+                            out.write(pathBytes.size shr 8 and 0xFF)
+                            out.write(pathBytes.size and 0xFF)
+                            out.write(pathBytes)
+                        }
+                        out.flush()
+
+                        // Legge count orfani (4 byte).
+                        // CRITICO: inp.read() può restituire meno byte del richiesto su TCP.
+                        // DataInputStream.readFully garantisce la lettura completa.
+                        val din = DataInputStream(inp)
+                        val orphanCount = din.readInt()
+
+                        // Legge ogni path orfano
+                        repeat(orphanCount) {
+                            val pathLen = din.readUnsignedShort()
+                            val pathBuf = ByteArray(pathLen)
+                            din.readFully(pathBuf)
+                            orphans.add(String(pathBuf, Charsets.UTF_8))
+                        }
                     }
+
+                    Log.i(TAG, "✅ SyncIndex completato: ${orphans.size} orfani trovati")
+                    result = orphans
                 }
-
-                Log.i(TAG, "✅ SyncIndex completato: ${orphans.size} orfani trovati")
-                onResult(orphans)
             } catch (e: Exception) {
                 Log.e(TAG, "❌ SyncIndex fallito: ${e.message}", e)
-                onResult(emptyList())
             }
+            onResult(result)
         }
     }
 
@@ -532,26 +652,32 @@ object ShadowClient {
 
     fun testConnection(context: Context, onResult: (Boolean, String) -> Unit) {
         networkExecutor.submit {
+            // Callback invocato una sola volta, fuori dal try (vedi upload/download).
+            var success = false
+            var message: String
             try {
                 val ip = getServerIp(context)
                 val port = getServerPort(context)
-                if (ip.isEmpty()) {
-                    onResult(false, context.getString(R.string.connection_ip_not_configured))
-                    return@submit
+                message = when {
+                    ip.isEmpty() ->
+                        context.getString(R.string.connection_ip_not_configured)
+                    !areCertsPresent(context) ->
+                        context.getString(R.string.connection_missing_certs, getCertsDisplayPath(context))
+                    else -> {
+                        createSSLSocket(context, ip, port).use { ssl ->
+                            // startHandshake() esplicito: flush() su stream vuoto può
+                            // NON avviare l'handshake TLS — il test risulterebbe OK
+                            // anche con mTLS rotto (certificati sbagliati/scaduti).
+                            ssl.startHandshake()
+                        }
+                        success = true
+                        context.getString(R.string.connection_success, ip, port)
+                    }
                 }
-                if (!areCertsPresent(context)) {
-                    onResult(false, context.getString(R.string.connection_missing_certs, getCertsDisplayPath(context)))
-                    return@submit
-                }
-
-                createSSLSocket(context, ip, port).use { ssl ->
-                    // Basta aprire la connessione TLS per verificare che funzioni
-                    ssl.outputStream.flush()
-                }
-                onResult(true, context.getString(R.string.connection_success, ip, port))
             } catch (e: Exception) {
-                onResult(false, context.getString(R.string.connection_error, e.message))
+                message = context.getString(R.string.connection_error, e.message)
             }
+            onResult(success, message)
         }
     }
 

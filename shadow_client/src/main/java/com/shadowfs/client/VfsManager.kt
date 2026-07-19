@@ -112,31 +112,57 @@ class VfsManager {
         // 2. Genera il thumbnail dall'originale (ancora intatto)
         val thumbnailBytes = generateThumbnail(file)
 
-        // 3. Crea il file .shadow con i metadati
+        // 3. Crea il file .shadow con i metadati.
+        // DENTRO un try: prima questa scrittura era fuori e su errore (disco
+        // pieno — lo scenario tipico dell'app!) l'eccezione propagava senza
+        // rollback, lasciando il file con IS_PENDING=1 → invisibile in
+        // Galleria/Google Photos a tempo indeterminato.
         val shadowFile = File(file.parent, file.name + ".shadow")
-        shadowFile.writeText(buildString {
-            append("originalSize=$originalSize\n")
-            append("status=GHOST\n")
-            append("lastModified=$lastModified\n")
-            append("hasThumbnail=${thumbnailBytes != null}\n")
-            if (checksumHex != null) append("checksum=$checksumHex\n")
-            append("restoredCount=$restoredCount")
-        })
-
-        // 4. Sostituisci il contenuto con il thumbnail oppure tronca a 0
         try {
+            shadowFile.writeText(buildString {
+                append("originalSize=$originalSize\n")
+                append("status=GHOST\n")
+                append("lastModified=$lastModified\n")
+                append("hasThumbnail=${thumbnailBytes != null}\n")
+                if (checksumHex != null) append("checksum=$checksumHex\n")
+                append("restoredCount=$restoredCount")
+            })
+        } catch (e: Exception) {
+            Log.e(TAG, "Errore scrittura marker per ${file.name}: ${e.message}")
+            shadowFile.delete() // eventuale marker parziale
+            setIsPending(context, file, pending = false) // file intatto: torna visibile
+            return
+        }
+
+        // 4. Sostituisci il contenuto con il thumbnail oppure tronca a 0.
+        // ATTENZIONE: il costruttore di FileOutputStream TRONCA il file — da
+        // quel momento il contenuto locale non esiste più. La strategia di
+        // rollback dipende da quando avviene l'errore:
+        //  - PRIMA del troncamento → file intatto: via marker e IS_PENDING.
+        //  - DOPO il troncamento  → contenuto perso localmente ma integro sul
+        //    Raspberry: TENERE marker e IS_PENDING, così il file resta
+        //    idratabile e la versione corrotta non appare in galleria.
+        var contentTruncated = false
+        try {
+            val fos = FileOutputStream(file)
+            contentTruncated = true
+            fos.use { if (thumbnailBytes != null) it.write(thumbnailBytes) }
             if (thumbnailBytes != null) {
-                FileOutputStream(file).use { it.write(thumbnailBytes) }
                 Log.i(TAG, "Ghost con thumbnail: ${file.name} (thumbnail ${thumbnailBytes.size} bytes, originale $originalSize bytes)")
             } else {
-                FileOutputStream(file).use { /* apre e chiude → 0 byte */ }
                 Log.i(TAG, "Ghost (0 byte, no thumbnail): ${file.name}")
             }
             file.setLastModified(lastModified)
         } catch (e: Exception) {
-            Log.e(TAG, "Errore ghosting ${file.name}: ${e.message}")
-            shadowFile.delete() // rollback marker
-            setIsPending(context, file, pending = false) // rollback IS_PENDING
+            if (!contentTruncated) {
+                Log.e(TAG, "Errore ghosting ${file.name} (contenuto intatto): ${e.message}")
+                shadowFile.delete() // rollback marker
+                setIsPending(context, file, pending = false) // rollback IS_PENDING
+            } else {
+                Log.e(TAG, "Errore ghosting ${file.name} DOPO il troncamento: ${e.message} " +
+                        "— marker mantenuto: il file resta idratabile dal Raspberry")
+                // niente rollback: marker + IS_PENDING permettono il recupero
+            }
             return
         }
         // IS_PENDING rimane true: file nascosto finché non viene idratato

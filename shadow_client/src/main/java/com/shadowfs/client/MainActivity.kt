@@ -18,6 +18,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.materialswitch.MaterialSwitch
 import java.io.File
 
 /**
@@ -48,13 +50,15 @@ class MainActivity : AppCompatActivity() {
 
     // --- Views ---
     private lateinit var tvStatus: TextView
+    private lateinit var statusDot: View
     private lateinit var tvSpace: TextView
+    private lateinit var progressStorage: ProgressBar
     private lateinit var tvCertStatus: TextView
     private lateinit var etServerIp: EditText
     private lateinit var etServerPort: EditText
     private lateinit var btnSaveConfig: Button
-    private lateinit var btnPermission: Button
-    private lateinit var btnStartService: Button
+    private lateinit var btnPermission: MaterialButton
+    private lateinit var btnStartService: MaterialButton
     private lateinit var btnForceOffload: Button
     private lateinit var btnTestConnection: Button
     private lateinit var tvCertPath: TextView
@@ -63,8 +67,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnDiscover: Button
     private lateinit var btnQrScan: Button
     private lateinit var btnPinnedFolders: Button
-    private lateinit var btnBatteryOpt: Button
-    private lateinit var switchAutoHydration: Switch
+    private lateinit var btnBatteryOpt: MaterialButton
+    private lateinit var switchAutoHydration: MaterialSwitch
 
     private var nsdManager: NsdManager? = null
     private var discoveryListener: NsdManager.DiscoveryListener? = null
@@ -96,7 +100,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun bindViews() {
         tvStatus        = findViewById(R.id.tv_status)
+        statusDot       = findViewById(R.id.status_dot)
         tvSpace         = findViewById(R.id.tv_space)
+        progressStorage = findViewById(R.id.progress_storage)
         tvCertStatus    = findViewById(R.id.tv_cert_status)
         etServerIp      = findViewById(R.id.et_server_ip)
         etServerPort    = findViewById(R.id.et_server_port)
@@ -239,12 +245,12 @@ class MainActivity : AppCompatActivity() {
                 toast(R.string.toast_configure_server_first)
                 return@setOnClickListener
             }
-            tvStatus.setText(R.string.status_testing_connection)
+            setStatus(R.string.status_testing_connection, R.color.cyan)
             btnTestConnection.isEnabled = false
 
             ShadowClient.testConnection(this) { success, message ->
                 runOnUiThread {
-                    tvStatus.text = if (success) "🟢 $message" else "🔴 $message"
+                    setStatus(message, if (success) R.color.success else R.color.danger)
                     btnTestConnection.isEnabled = true
                 }
             }
@@ -438,18 +444,17 @@ class MainActivity : AppCompatActivity() {
         val usableGB = usable / (1024.0 * 1024 * 1024)
         val totalGB = total / (1024.0 * 1024 * 1024)
         tvSpace.text = getString(R.string.storage_space_status, usableGB, totalGB, freePercent)
+        progressStorage.progress = (100 - freePercent).coerceIn(0, 100)
 
-        // Permesso
-        val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
-        } else { true }
+        // Ricontrolla tutti i permessi necessari (audit centralizzato)
+        val perms = ShadowClient.checkRequiredPermissions(this)
+
+        val hasPermission = perms.storageAllFiles
         btnPermission.text = getString(if (hasPermission) R.string.button_file_permission_granted else R.string.button_file_permission_request)
         btnPermission.isEnabled = !hasPermission
 
         // Battery optimization
-        val pm = getSystemService(PowerManager::class.java)
-        val batteryOptDisabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.M ||
-            pm.isIgnoringBatteryOptimizations(packageName)
+        val batteryOptDisabled = perms.batteryUnrestricted
         btnBatteryOpt.text = if (batteryOptDisabled)
             getString(R.string.button_battery_optimization_disabled)
         else
@@ -459,12 +464,14 @@ class MainActivity : AppCompatActivity() {
         // Certificati
         val certsOk = ShadowClient.areCertsPresent(this)
         tvCertStatus.text = getString(if (certsOk) R.string.certificates_found else R.string.certificates_missing)
+        tvCertStatus.setTextColor(ContextCompat.getColor(this, if (certsOk) R.color.success else R.color.danger))
         tvCertPath.text = getString(R.string.certificates_path, ShadowClient.getCertsDisplayPath(this))
         tvCertPath.visibility = if (!certsOk) View.VISIBLE else View.GONE
 
         // Servizio
         val running = isServiceRunning()
         btnStartService.text = getString(if (running) R.string.button_stop_daemon else R.string.button_start_daemon)
+        btnStartService.setIconResource(if (running) R.drawable.ic_stop else R.drawable.ic_play)
         btnForceOffload.isEnabled = running && hasPermission && certsOk && ShadowClient.isConfigured(this)
 
         // Lista file ghostati
@@ -472,31 +479,39 @@ class MainActivity : AppCompatActivity() {
 
         // Stato generale
         if (!ShadowClient.isConfigured(this)) {
-            tvStatus.setText(R.string.status_configure_server)
+            setStatus(R.string.status_configure_server, R.color.warning)
         } else if (!certsOk) {
-            tvStatus.setText(R.string.status_copy_certs)
+            setStatus(R.string.status_copy_certs, R.color.warning)
         } else if (!hasPermission) {
-            tvStatus.setText(R.string.status_grant_file_permission)
+            setStatus(R.string.status_grant_file_permission, R.color.warning)
         } else if (running) {
-            tvStatus.setText(R.string.status_daemon_running)
+            setStatus(R.string.status_daemon_running, R.color.success)
         } else {
-            tvStatus.setText(R.string.status_daemon_stopped)
+            setStatus(R.string.status_daemon_stopped, R.color.text_tertiary)
         }
     }
+
+    /** Aggiorna messaggio di stato + colore del pallino indicatore. */
+    private fun setStatus(text: CharSequence, colorRes: Int) {
+        tvStatus.text = text
+        statusDot.background.mutate().setTint(ContextCompat.getColor(this, colorRes))
+    }
+
+    private fun setStatus(resId: Int, colorRes: Int) = setStatus(getString(resId), colorRes)
 
     /** Avvia la scoperta mDNS del Raspberry sulla rete locale */
     private fun startMdnsDiscovery() {
         stopMdnsDiscovery()
         btnDiscover.isEnabled = false
         btnDiscover.setText(R.string.button_discover_searching)
-        tvStatus.setText(R.string.status_searching_raspberry)
+        setStatus(R.string.status_searching_raspberry, R.color.cyan)
 
         nsdManager = getSystemService(Context.NSD_SERVICE) as NsdManager
 
         val resolveListener = object : NsdManager.ResolveListener {
             override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
                 runOnUiThread {
-                    tvStatus.setText(R.string.status_raspberry_unresolvable)
+                    setStatus(R.string.status_raspberry_unresolvable, R.color.danger)
                     resetDiscoverButton()
                 }
             }
@@ -509,7 +524,7 @@ class MainActivity : AppCompatActivity() {
                     etServerPort.setText(port.toString())
                     ShadowClient.saveConfig(this@MainActivity, host, port)
                     toast(R.string.toast_raspberry_found, host, port)
-                    tvStatus.text = getString(R.string.status_raspberry_found, host)
+                    setStatus(getString(R.string.status_raspberry_found, host), R.color.success)
                     resetDiscoverButton()
                     refreshUI()
                 }
@@ -520,7 +535,7 @@ class MainActivity : AppCompatActivity() {
         discoveryListener = object : NsdManager.DiscoveryListener {
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
                 runOnUiThread {
-                    tvStatus.text = getString(R.string.status_mdns_failed, errorCode)
+                    setStatus(getString(R.string.status_mdns_failed, errorCode), R.color.danger)
                     resetDiscoverButton()
                 }
             }
@@ -540,7 +555,7 @@ class MainActivity : AppCompatActivity() {
         btnDiscover.postDelayed({
             if (!btnDiscover.isEnabled) {
                 stopMdnsDiscovery()
-                tvStatus.setText(R.string.status_no_raspberry_found)
+                setStatus(R.string.status_no_raspberry_found, R.color.warning)
                 resetDiscoverButton()
             }
         }, 10_000)
@@ -645,11 +660,12 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 if (shadowFiles.isEmpty()) {
-                    tvGhostSummary.text = ""
+                    tvGhostSummary.visibility = View.GONE
                     btnGhostList.setText(R.string.button_ghost_list)
                 } else {
                     btnGhostList.text = getString(R.string.button_ghost_list_count, shadowFiles.size)
                     tvGhostSummary.text = getString(R.string.ghost_summary_recovered, formatSize(totalRecovered))
+                    tvGhostSummary.visibility = View.VISIBLE
                 }
             }
         }.start()
